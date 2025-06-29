@@ -82,6 +82,9 @@ if [ -z "$EXTRACTED_BINARY" ]; then
     exit 1
 fi
 
+# Get just the filename without path
+BINARY_FILENAME=$(basename "$EXTRACTED_BINARY")
+
 if [ "$OS" != "windows" ]; then
     chmod +x "$EXTRACTED_BINARY"
 fi
