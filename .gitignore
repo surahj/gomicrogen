@@ -49,14 +49,14 @@ logs/
 .env.local
 .env.*.local
 
-# Temporary files
-tmp/
-temp/
+# Temporary files (be specific to avoid matching templates/)
+/tmp/
+/temp/
 *.tmp
 
 # Coverage reports
 coverage.out
 coverage.html
 
-# Air live reload
+# Air live reload temporary files
 tmp/ 

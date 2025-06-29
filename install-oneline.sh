@@ -44,11 +44,11 @@ fi
 
 # Download URL
 if [ "$OS" = "windows" ]; then
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH.exe"
-    BINARY_NAME="gomicrogen.exe"
+    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-windows-$ARCH.zip"
+    local_filename="gomicrogen-windows-$ARCH.zip"
 else
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH"
-    BINARY_NAME="gomicrogen"
+    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH.tar.gz"
+    local_filename="gomicrogen-$OS-$ARCH.tar.gz"
 fi
 
 echo -e "${BLUE}📦 Downloading gomicrogen $LATEST_VERSION for $OS/$ARCH...${NC}"
@@ -58,32 +58,48 @@ TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
 if command -v curl >/dev/null 2>&1; then
-    curl -L -o "$BINARY_NAME" "$DOWNLOAD_URL"
+    curl -L -o "$local_filename" "$DOWNLOAD_URL"
 elif command -v wget >/dev/null 2>&1; then
-    wget -O "$BINARY_NAME" "$DOWNLOAD_URL"
+    wget -O "$local_filename" "$DOWNLOAD_URL"
 else
     echo "❌ Neither curl nor wget is available. Please install one of them."
     exit 1
 fi
 
+# Extract the binary
+if [ "$OS" = "windows" ]; then
+    unzip -q "$local_filename"
+    BINARY_NAME="gomicrogen.exe"
+else
+    tar -xzf "$local_filename"
+    BINARY_NAME="gomicrogen"
+fi
+
+# Find the extracted binary
+EXTRACTED_BINARY=$(find . -name "gomicrogen*" -type f | head -1)
+if [ -z "$EXTRACTED_BINARY" ]; then
+    echo "❌ Failed to extract binary from archive"
+    exit 1
+fi
+
 if [ "$OS" != "windows" ]; then
-    chmod +x "$BINARY_NAME"
+    chmod +x "$EXTRACTED_BINARY"
 fi
 
 # Install to /usr/local/bin (or ~/.local/bin if no write permission)
 if [ -w "/usr/local/bin" ] || command -v sudo >/dev/null 2>&1; then
     if [ -w "/usr/local/bin" ]; then
-        cp "$BINARY_NAME" "/usr/local/bin/"
-        chmod +x "/usr/local/bin/$BINARY_NAME"
+        cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
+        chmod +x "/usr/local/bin/gomicrogen"
     else
-        sudo cp "$BINARY_NAME" "/usr/local/bin/"
-        sudo chmod +x "/usr/local/bin/$BINARY_NAME"
+        sudo cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
+        sudo chmod +x "/usr/local/bin/gomicrogen"
     fi
     echo -e "${GREEN}✅ Installed to /usr/local/bin/${NC}"
 else
     mkdir -p "$HOME/.local/bin"
-    cp "$BINARY_NAME" "$HOME/.local/bin/"
-    chmod +x "$HOME/.local/bin/$BINARY_NAME"
+    cp "$EXTRACTED_BINARY" "$HOME/.local/bin/gomicrogen"
+    chmod +x "$HOME/.local/bin/gomicrogen"
     echo -e "${GREEN}✅ Installed to $HOME/.local/bin/${NC}"
     echo -e "${BLUE}💡 Please add $HOME/.local/bin to your PATH${NC}"
 fi
