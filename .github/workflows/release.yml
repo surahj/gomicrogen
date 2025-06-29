@@ -118,12 +118,12 @@ jobs:
 
             ### Linux/macOS
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
             ```
 
             ### Windows (PowerShell)
             ```powershell
-            Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubuseurcontent.com/Choplife-group/gomicrogen/main/install.ps1" -UseBasicParsing).Content
+            Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/surahj/gomicrogen/main/install.ps1" -UseBasicParsing).Content
             ```
 
             ### Manual Installation
