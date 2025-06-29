@@ -75,8 +75,8 @@ else
     BINARY_NAME="gomicrogen"
 fi
 
-# Find the extracted binary
-EXTRACTED_BINARY=$(find . -name "gomicrogen*" -type f | head -1)
+# Find the extracted binary (exclude archive files)
+EXTRACTED_BINARY=$(find . -name "gomicrogen*" -type f ! -name "*.tar.gz" ! -name "*.zip" | head -1)
 if [ -z "$EXTRACTED_BINARY" ]; then
     echo "❌ Failed to extract binary from archive"
     exit 1
