@@ -8,7 +8,7 @@ param(
 )
 
 # Configuration
-$Repo = "Choplife-group/gomicrogen"
+$Repo = "surahj/gomicrogen"
 $BinaryName = "gomicrogen.exe"
 $TempDir = "$env:TEMP\gomicrogen-install"
 

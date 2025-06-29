@@ -1,8 +1,14 @@
 #!/bin/bash
 # One-liner installation script for gomicrogen
-# Usage: curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install-oneline.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
 
 set -e
+
+# Configuration
+REPO="surahj/gomicrogen"
+BINARY_NAME="gomicrogen"
+INSTALL_DIR="/usr/local/bin"
+TEMP_DIR="/tmp/gomicrogen-install"
 
 # Colors
 GREEN='\033[0;32m'
@@ -30,7 +36,7 @@ case "$OS" in
 esac
 
 # Get latest version
-LATEST_VERSION=$(curl -s "https://api.github.com/repos/Choplife-group/gomicrogen/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+LATEST_VERSION=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
     LATEST_VERSION="latest"
@@ -38,10 +44,10 @@ fi
 
 # Download URL
 if [ "$OS" = "windows" ]; then
-    DOWNLOAD_URL="https://github.com/Choplife-group/gomicrogen/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH.exe"
+    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH.exe"
     BINARY_NAME="gomicrogen.exe"
 else
-    DOWNLOAD_URL="https://github.com/Choplife-group/gomicrogen/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH"
+    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH"
     BINARY_NAME="gomicrogen"
 fi
 
