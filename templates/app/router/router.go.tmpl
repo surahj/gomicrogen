@@ -1,0 +1,151 @@
+package router
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"os"
+
+	"{{ .ModuleName }}/app/controllers"
+	db "{{ .ModuleName }}/app/database"
+	"github.com/go-redis/redis"
+	"github.com/gorilla/sessions"
+	"github.com/labstack/echo-contrib/session"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/sirupsen/logrus"
+	echoSwagger "github.com/swaggo/echo-swagger"
+	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+)
+
+// router and DB instance
+type App struct {
+	E          *echo.Echo
+	DB         *sql.DB
+	RedisConn  *redis.Client
+	Controller *controllers.Controller
+}
+
+// Initialize initializes the app with predefined configuration
+func (a *App) Initialize(tr trace.Tracer, ctx context.Context, dbInstance *sql.DB) {
+
+	_, span := tr.Start(ctx, "Initialize")
+	defer span.End()
+
+	// init webserver
+	a.E = echo.New()
+	a.E.Static("/doc", "api")
+
+	a.E.Use(middleware.Gzip())
+	a.E.IPExtractor = echo.ExtractIPFromXFFHeader()
+	// add recovery middleware to make the system null safe
+	a.E.Use(middleware.Recover()) // change due to swagger
+	a.E.Use(session.Middleware(sessions.NewCookieStore([]byte(os.Getenv("SESSION_SECRET")))))
+
+	a.E.Use(middleware.RequestID())
+
+	a.E.Use(otelecho.Middleware("{{ .ServiceName }}"))
+
+	// setup log format and parameters to log for every request
+
+	// Instrument logrus.
+	logrus.AddHook(otellogrus.NewHook(otellogrus.WithLevels(
+		logrus.PanicLevel,
+		logrus.FatalLevel,
+		logrus.ErrorLevel,
+		logrus.WarnLevel,
+		logrus.InfoLevel,
+		logrus.DebugLevel,
+		logrus.TraceLevel,
+	)))
+
+	a.E.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "${method} | ${time_rfc3339} | status - ${status} | ttl - ${latency_human} | ${uri} | ip - ${remote_ip} \n",
+		Output: log.Writer(),
+	}))
+
+	allowedMethods := []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete, http.MethodOptions}
+	AllowOrigins := []string{"*"}
+
+	//setup CORS
+	corsConfig := middleware.CORSConfig{
+		AllowOrigins: AllowOrigins, // in production limit this to only known hosts
+		AllowHeaders: AllowOrigins,
+		AllowMethods: allowedMethods,
+	}
+	a.E.Use(middleware.CORSWithConfig(corsConfig))
+
+	// get rabbitMQ connection
+	a.DB = dbInstance
+	a.RedisConn = db.RedisClient()
+
+	controller := controllers.Controller{
+		DB:        a.DB,
+		RedisConn: a.RedisConn,
+		Tracer:    tr,
+	}
+
+	a.Controller = &controller
+
+	go a.setRouters()
+}
+
+// setRouters sets the all required router
+func (a *App) setRouters() {
+
+	// public
+
+
+	a.E.GET("/docs/*", echoSwagger.WrapHandler)
+
+	// status
+	a.E.POST("/", a.GetStatus)
+	a.E.GET("/", a.GetStatus)
+}
+
+// Run the app on it's router
+func (a *App) Run() {
+
+	server := fmt.Sprintf("%s:%s", os.Getenv("SYSTEM_HOST"), os.Getenv("SYSTEM_PORT"))
+
+	log.Printf("HTTP listening on... %s", server)
+
+	a.E.Logger.Fatal(a.E.Start(server))
+}
+
+// GRPCRun setup GRPC endpoints
+func (a *App) GRPCRun() {
+
+	host := os.Getenv("SYSTEM_HOST")
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	port := os.Getenv("SYSTEM_GRPC_PORT")
+	if port == "" {
+		port = "{{ .GRPCPort }}"
+	}
+
+	server := fmt.Sprintf("%s:%s", host, port)
+
+	lis, err := net.Listen("tcp", server)
+	if err != nil {
+		log.Fatalf("Failed to listen... %v", err)
+	}
+
+	s := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
+
+	log.Printf("gRPC server listening at %v", lis.Addr())
+
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve... %v", err)
+	}
+} 

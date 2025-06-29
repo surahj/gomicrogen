@@ -1,0 +1,9 @@
+info:
+  contact: {}
+paths: {}
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: api-key
+    type: apiKey
+swagger: "2.0"

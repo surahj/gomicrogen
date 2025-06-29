@@ -1,0 +1,4 @@
+root = "."
+tmp_dir = "tmp"
+build_cmd = "swag init && go build -o ./tmp/{{ .ServiceName }} ."
+run_cmd = "./tmp/{{ .ServiceName }}" 

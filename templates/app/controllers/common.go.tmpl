@@ -1,0 +1,68 @@
+package controllers
+
+import (
+	"fmt"
+	"os"
+
+	"{{ .ModuleName }}/app/models"
+	"github.com/labstack/echo/v4"
+	"go.opentelemetry.io/otel/trace"
+)
+
+func RespondRaw(c echo.Context, span trace.Span, code int, message interface{}) error {
+
+	c.Response().Header().Add("trace-id", span.SpanContext().TraceID().String())
+	c.Response().Header().Add("span-id", span.SpanContext().SpanID().String())
+
+	return c.JSON(code, message)
+}
+
+func RespondWithSignature(c echo.Context, signature string, code int, message interface{}) error {
+
+	c.Response().Header().Add("X-SIGN", signature)
+
+	return c.JSON(code, message)
+}
+
+func RespondJSON(c echo.Context, span trace.Span, code int, message interface{}) error {
+
+	c.Response().Header().Add("trace-id", span.SpanContext().TraceID().String())
+	c.Response().Header().Add("span-id", span.SpanContext().SpanID().String())
+
+	return c.JSON(code, models.ResponseMessage{
+		Status:  code,
+		Message: message,
+	})
+}
+
+func (controller *Controller) GetUsername(msisdn int64) string {
+
+	ms := fmt.Sprintf("%d", msisdn)
+	trimmed := fmt.Sprintf("0%s", ms[3:])
+
+	return fmt.Sprintf("%sXXX", trimmed[0:len(trimmed)-3])
+}
+
+func getLanguage(c echo.Context) string {
+	language := c.Request().Header.Get("Lang")
+
+	if len(language) == 0 {
+		language = getDefaultLanguage()
+	}
+
+	if len(language) == 0 {
+		language = "en"
+	}
+
+	return language
+}
+
+func getDefaultLanguage() string {
+	language := os.Getenv("DEFAULT_LANGUAGE")
+
+	if len(language) == 0 {
+		language = "fr"
+	}
+
+	return language
+} 

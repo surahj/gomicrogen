@@ -1,0 +1,22 @@
+install:
+	go mod vendor
+	go mod download
+
+swagger:
+	# Generate swagger documentation from root directory
+	swag init
+
+build: swagger
+	go build -o {{ .ServiceName }}
+
+run:
+	./{{ .ServiceName }}
+
+docker-up:
+	docker compose -f docker-compose-local.yml up -d
+
+docker-down:
+	docker compose -f docker-compose-local.yml down
+
+run-air:
+	air 

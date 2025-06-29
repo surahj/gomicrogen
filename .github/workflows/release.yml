@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            binary_name: gomicrogen-linux-amd64
+          - os: linux
+            arch: arm64
+            binary_name: gomicrogen-linux-arm64
+          - os: darwin
+            arch: amd64
+            binary_name: gomicrogen-darwin-amd64
+          - os: darwin
+            arch: arm64
+            binary_name: gomicrogen-darwin-arm64
+          - os: windows
+            arch: amd64
+            binary_name: gomicrogen-windows-amd64.exe
+          - os: windows
+            arch: arm64
+            binary_name: gomicrogen-windows-arm64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23"
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_TIME: ${{ github.event.head_commit.timestamp }}
+        run: |
+          go build \
+            -ldflags "-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}" \
+            -o ${{ matrix.binary_name }} .
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: ${{ matrix.binary_name }}
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create release archive
+        run: |
+          mkdir -p release
+
+          # Create tar.gz for Unix-like systems
+          for binary in gomicrogen-linux-* gomicrogen-darwin-*; do
+            if [ -f "$binary" ]; then
+              tar -czf "release/${binary}.tar.gz" "$binary"
+            fi
+          done
+
+          # Create zip for Windows
+          for binary in gomicrogen-windows-*.exe; do
+            if [ -f "$binary" ]; then
+              zip "release/${binary%.exe}.zip" "$binary"
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## What's Changed
+
+            This release includes:
+            - Cross-platform binaries for Linux, macOS, and Windows
+            - Support for both AMD64 and ARM64 architectures
+
+            ## Installation
+
+            ### Linux/macOS
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install.sh | bash
+            ```
+
+            ### Windows (PowerShell)
+            ```powershell
+            Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubuseurcontent.com/Choplife-group/gomicrogen/main/install.ps1" -UseBasicParsing).Content
+            ```
+
+            ### Manual Installation
+            Download the appropriate binary for your platform from the assets below.
+
+            ## Quick Start
+
+            ```bash
+            gomicrogen new my-service --module github.com/your-org/my-service
+            ```
+
+            ## Supported Platforms
+
+            - Linux (AMD64, ARM64)
+            - macOS (AMD64, ARM64)
+            - Windows (AMD64, ARM64)
+          files: |
+            release/*.tar.gz
+            release/*.zip
+          draft: false
+          prerelease: false

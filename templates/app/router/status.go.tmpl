@@ -1,0 +1,34 @@
+package router
+
+import (
+	"net/http"
+
+	"{{ .ModuleName }}/app/database"
+	"github.com/labstack/echo/v4"
+)
+
+func (a *App) GetStatus(c echo.Context) error {
+
+	ctx := c.Request().Context()
+	defer ctx.Done()
+
+	status := make(map[string]interface{})
+
+	statusCode := http.StatusOK
+
+	// Check database status
+	st, re := database.CheckConnectionStatus(c.Request().Context(), a.DB)
+	if st > statusCode {
+		statusCode = st
+	}
+
+	for k, v := range re {
+		status[k] = v
+	}
+
+	// Add service status
+	status["service"] = "healthy"
+	status["service-name"] = "{{ .ServiceName }}"
+
+	return c.JSON(statusCode, status)
+} 

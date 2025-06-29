@@ -1,0 +1,61 @@
+package library
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/md5"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+
+	"{{ .ModuleName }}/app/constants"
+	"github.com/sirupsen/logrus"
+)
+
+// decrypt from base64 to decrypted string
+func Decrypt(keyString string, stringToDecrypt string) (plainText string, err error) {
+
+	key, _ := hex.DecodeString(keyString)
+	ciphertext, _ := base64.URLEncoding.DecodeString(stringToDecrypt)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		logrus.
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "Error creating new cipher block from key",
+			}).
+			Error(err.Error())
+
+		return "", err
+	}
+
+	// The IV needs to be unique, but not secure. Therefore it's common to
+	// include it at the beginning of the ciphertext.
+	if len(ciphertext) < aes.BlockSize {
+		logrus.
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "ciphertext too short",
+				constants.DATA:        ciphertext,
+			}).
+			Error(err.Error())
+
+		return "", fmt.Errorf("ciphertext too short")
+	}
+
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+
+	// XORKeyStream can work in-place if the two arguments are the same.
+	stream.XORKeyStream(ciphertext, ciphertext)
+
+	return fmt.Sprintf("%s", ciphertext), nil
+}
+
+func ComputeMD5Hash(text string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(text))
+
+	return hex.EncodeToString(hasher.Sum(nil))
+} 

@@ -1,0 +1,14 @@
+package controllers
+
+import (
+	"database/sql"
+
+	"github.com/go-redis/redis"
+	trace "go.opentelemetry.io/otel/trace"
+)
+
+type Controller struct {
+	DB        *sql.DB
+	RedisConn *redis.Client
+	Tracer    trace.Tracer
+} 

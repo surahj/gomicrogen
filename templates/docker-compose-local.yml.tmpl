@@ -1,0 +1,49 @@
+services:
+  {{ .ServiceName }}:
+    build:
+      context: ./
+      dockerfile: Dockerfile.dev
+    container_name: {{ .ServiceName }}
+    hostname: {{ .ServiceName }}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - {{ .ServiceName }}ci
+    ports:
+      - "{{ .Port }}:80"
+      - "{{ .GRPCPort }}:81"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    expose:
+      - 80
+      - 81
+    environment:
+      DATABASE_USERNAME: {{ .ServiceName }}
+      DATABASE_HOST: {{ .DatabaseHost }}
+      DATABASE_HOST_READ: {{ .DatabaseHost }}
+      DATABASE_PORT: {{ .DatabasePort }}
+      DATABASE_PASSWORD: {{ .DatabasePassword }}
+      DATABASE_NAME: {{ .ServiceName }}
+      DATABASE_IDLE_CONNECTION: 100
+      DATABASE_CONNECTION_LIFETIME: 60
+    
+      DATABASE_MAX_CONNECTION: 150
+      REDIS_HOST: 
+      REDIS_PORT: 
+      REDIS_DATABASE_NUMBER:
+      REDIS_PASSWORD: 
+     
+      SYSTEM_HOST: 0.0.0.0
+      SYSTEM_PORT: 80
+      SYSTEM_GRPC_PORT: 81
+   
+      ENV: dev
+    volumes:
+      - .:/app:cached
+
+    deploy:
+      restart_policy:
+        condition: on-failure
+networks:
+  {{ .ServiceName }}ci:
+    driver: bridge 

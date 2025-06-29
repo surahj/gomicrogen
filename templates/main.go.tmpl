@@ -1,0 +1,94 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"{{ .ModuleName }}/app/database"
+	"{{ .ModuleName }}/docs"
+	"{{ .ModuleName }}/app/router"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/mysql"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/sirupsen/logrus"
+	"github.com/uptrace/uptrace-go/uptrace"
+	"go.opentelemetry.io/otel"
+)
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name api-key
+
+func main() {
+
+	docs.SwaggerInfo.Title = "{{ .ServiceName }} Service API"
+	docs.SwaggerInfo.Description = "This API documents exposes all the available API endpoints for {{ .ServiceName }} service"
+	docs.SwaggerInfo.Version = "{{ .Version }}"
+	docs.SwaggerInfo.Host = os.Getenv("BASE_URL")
+	docs.SwaggerInfo.BasePath = "/"
+	docs.SwaggerInfo.Schemes = []string{"https"}
+
+	ctx := context.Background()
+
+	// Configure OpenTelemetry with sensible defaults.
+	uptrace.ConfigureOpentelemetry(
+		// copy your project DSN here or use UPTRACE_DSN env var
+		uptrace.WithDSN(os.Getenv("UPTRACE_DSN")),
+		uptrace.WithServiceName("{{ .ServiceName }}"),
+		uptrace.WithServiceVersion("{{ .Version }}"),
+		uptrace.WithDeploymentEnvironment("{{ .Environment }}"),
+		uptrace.WithMetricsEnabled(true),
+		uptrace.WithTracingEnabled(true),
+	)
+
+	// Send buffered spans and free resources.
+	defer uptrace.Shutdown(ctx)
+
+	// Create a tracer. Usually, tracer is a global variable.
+	tracer := otel.Tracer("{{ .ServiceName }}")
+
+	// Create a root span (a trace) to measure some operation.
+	ctx, mainSPan := tracer.Start(ctx, "{{ .ServiceName }}")
+	// End the span when the operation we are measuring is done.
+	defer mainSPan.End()
+
+	fmt.Printf("Trace: %s\n", uptrace.TraceURL(mainSPan))
+
+	//setup database
+	dbInstance := database.DbInstance()
+
+	driver, err := mysql.WithInstance(dbInstance, &mysql.Config{})
+	if err != nil {
+		logrus.Panic(err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(fmt.Sprintf("file:///%s/migrations", GetRootPath()), "mysql", driver)
+	if err != nil {
+		logrus.Errorf("Migration setup error... %s", err.Error())
+	}
+
+	err = m.Up() // or m.Step(2) if you want to explicitly set the number of migrations to run
+	if err != nil {
+		logrus.Errorf("Migration error... %s", err.Error())
+	}
+
+	// setup consumers
+	var a router.App
+	a.Initialize(tracer, ctx, dbInstance)
+
+	go a.GRPCRun()
+
+	a.Run()
+}
+
+func GetRootPath() string {
+
+	_, b, _, _ := runtime.Caller(0)
+
+	// Root folder of this project
+	return filepath.Join(filepath.Dir(b), "./")
+} 

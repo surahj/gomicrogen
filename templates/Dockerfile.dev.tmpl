@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.23-alpine
+
+# Set the timezone environment variable and link the timezone data
+RUN apk add --no-cache tzdata \
+    && ln -snf /usr/share/zoneinfo/Africa/Abidjan /etc/localtime \
+    && echo "Africa/Abidjan" > /etc/timezone
+
+# Create and set the working directory
+WORKDIR /app
+
+# Copy go.mod and go.sum first to leverage Docker cache for dependencies
+COPY . ./
+
+# Install Swag CLI for generating API documentation
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+# Generate Swagger API documentation from root directory
+RUN swag init
+
+RUN go mod vendor
+
+RUN go mod download
+
+# Build the Go application
+RUN go build -o /{{ .ServiceName }}
+
+RUN go install github.com/air-verse/air@v1.52.3
+
+# Expose ports
+EXPOSE 8080
+EXPOSE 8081
+
+
+# Set the entrypoint for the Docker container
+CMD ["air"] 
