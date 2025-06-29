@@ -25,7 +25,7 @@ clean: ## Clean build artifacts
 
 test: ## Run tests
 	@echo "Running tests..."
-	go test -v ./...
+	go test -v ./cmd/... ./internal/...
 
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."
