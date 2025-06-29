@@ -40,7 +40,50 @@ var newCmd = &cobra.Command{
 	Use:   "new [service-name]",
 	Short: "Create a new Go microservice project",
 	Long: `Create a new Go microservice project with the specified name.
-This will generate a complete project structure with all necessary files.`,
+This will generate a complete project structure with all necessary files.
+
+The generated project includes:
+• Complete folder structure (app/, cmd/, docs/, k8s/, etc.)
+• Docker and Docker Compose configurations
+• Kubernetes deployment manifests
+• Database migrations and models
+• API documentation with Swagger/OpenAPI
+• Hot reload development setup
+• Observability integration
+• Redis caching and session management
+• Git repository initialization
+• Go module management
+
+Examples:
+  # Basic microservice
+  gomicrogen new user-service --module github.com/myorg/user-service
+
+  # With custom configuration
+  gomicrogen new payment-service \
+    --module github.com/myorg/payment-service \
+    --description "Payment processing microservice" \
+    --version "2.1.0" \
+    --author "John Doe" \
+    --port "3000" \
+    --grpc-port "3001" \
+    --db-driver "mysql" \
+    --db-host "localhost" \
+    --db-port "3306" \
+    --db-password "secret" \
+    --redis-host "localhost" \
+    --redis-port "6379" \
+    --env "development"
+
+  # In custom directory
+  gomicrogen new auth-service \
+    --module github.com/myorg/auth-service \
+    --output-dir /path/to/projects
+
+  # Force overwrite existing project
+  gomicrogen new my-service --module github.com/myorg/my-service --force
+
+  # Skip Git and Go module initialization
+  gomicrogen new my-service --module github.com/myorg/my-service --git=false --go-mod=false`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := args[0]
@@ -217,26 +260,34 @@ func checkExistingService(serviceName, targetDir string) error {
 func init() {
 	rootCmd.AddCommand(newCmd)
 
-	// Add flags
+	// Required flags
 	newCmd.Flags().StringVarP(&moduleName, "module", "m", "", "Go module name (e.g., github.com/your-org/service-name)")
 	newCmd.MarkFlagRequired("module")
-	newCmd.Flags().StringVarP(&description, "description", "d", "", "Service description")
-	newCmd.Flags().StringVarP(&version, "version", "v", "", "Service version")
-	newCmd.Flags().StringVarP(&author, "author", "a", "", "Author name")
-	newCmd.Flags().StringVarP(&port, "port", "p", "", "HTTP port")
-	newCmd.Flags().StringVarP(&grpcPort, "grpc-port", "g", "", "gRPC port")
-	newCmd.Flags().StringVarP(&databaseDriver, "db-driver", "", "", "Database driver (mysql, postgres, etc.)")
-	newCmd.Flags().StringVarP(&databaseURL, "db-url", "", "", "Database connection URL")
-	newCmd.Flags().StringVarP(&databaseHost, "db-host", "", "", "Database host")
-	newCmd.Flags().StringVarP(&databasePort, "db-port", "", "", "Database port")
+
+	// Service configuration flags
+	newCmd.Flags().StringVarP(&description, "description", "d", "", "Service description (e.g., 'User management microservice')")
+	newCmd.Flags().StringVarP(&version, "version", "v", "1.0.0", "Service version (e.g., '2.1.0')")
+	newCmd.Flags().StringVarP(&author, "author", "a", "", "Author name (e.g., 'John Doe')")
+	newCmd.Flags().StringVarP(&port, "port", "p", "8080", "HTTP port for the service")
+	newCmd.Flags().StringVarP(&grpcPort, "grpc-port", "g", "8081", "gRPC port for the service")
+	newCmd.Flags().StringVarP(&environment, "env", "e", "development", "Environment (development, staging, production)")
+
+	// Database configuration flags
+	newCmd.Flags().StringVarP(&databaseDriver, "db-driver", "", "", "Database driver (mysql, postgres, sqlite)")
+	newCmd.Flags().StringVarP(&databaseURL, "db-url", "", "", "Database connection URL (overrides individual db settings)")
+	newCmd.Flags().StringVarP(&databaseHost, "db-host", "", "localhost", "Database host")
+	newCmd.Flags().StringVarP(&databasePort, "db-port", "", "", "Database port (3306 for MySQL, 5432 for PostgreSQL)")
 	newCmd.Flags().StringVarP(&databasePassword, "db-password", "", "", "Database password")
-	newCmd.Flags().StringVarP(&redisURL, "redis-url", "", "", "Redis connection URL")
-	newCmd.Flags().StringVarP(&redisHost, "redis-host", "", "", "Redis host")
-	newCmd.Flags().StringVarP(&redisPort, "redis-port", "", "", "Redis port")
-	newCmd.Flags().StringVarP(&redisDatabaseNumber, "redis-db-number", "", "", "Redis database number")
+
+	// Redis configuration flags
+	newCmd.Flags().StringVarP(&redisURL, "redis-url", "", "", "Redis connection URL (overrides individual redis settings)")
+	newCmd.Flags().StringVarP(&redisHost, "redis-host", "", "localhost", "Redis host")
+	newCmd.Flags().StringVarP(&redisPort, "redis-port", "", "6379", "Redis port")
+	newCmd.Flags().StringVarP(&redisDatabaseNumber, "redis-db-number", "", "0", "Redis database number (0-15)")
 	newCmd.Flags().StringVarP(&redisPassword, "redis-password", "", "", "Redis password")
-	newCmd.Flags().StringVarP(&environment, "env", "e", "", "Environment (development, staging, production)")
-	newCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory")
+
+	// Output and behavior flags
+	newCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory (default: current directory)")
 	newCmd.Flags().BoolVarP(&initGit, "git", "", true, "Initialize Git repository with dev branch")
 	newCmd.Flags().BoolVarP(&runGoMod, "go-mod", "", true, "Run go mod init and go mod tidy")
 	newCmd.Flags().BoolVarP(&forceOverwrite, "force", "", false, "Force overwrite if service already exists")
