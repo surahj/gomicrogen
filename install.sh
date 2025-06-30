@@ -161,9 +161,9 @@ install_binary() {
         if command -v sudo >/dev/null 2>&1; then
             # Install binary
             if [ "$OS" = "windows" ]; then
-                sudo cp "$package_dir/${BINARY_NAME}.exe" "$INSTALL_DIR/$BINARY_NAME"
+                sudo cp "$package_dir/${BINARY_NAME}-${OS}-${ARCH}.exe" "$INSTALL_DIR/$BINARY_NAME"
             else
-                sudo cp "$package_dir/${BINARY_NAME}" "$INSTALL_DIR/$BINARY_NAME"
+                sudo cp "$package_dir/${BINARY_NAME}-${OS}-${ARCH}" "$INSTALL_DIR/$BINARY_NAME"
             fi
             sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
             
@@ -177,9 +177,9 @@ install_binary() {
     else
         # Install binary
         if [ "$OS" = "windows" ]; then
-            cp "$package_dir/${BINARY_NAME}.exe" "$INSTALL_DIR/$BINARY_NAME"
+            cp "$package_dir/${BINARY_NAME}-${OS}-${ARCH}.exe" "$INSTALL_DIR/$BINARY_NAME"
         else
-            cp "$package_dir/${BINARY_NAME}" "$INSTALL_DIR/$BINARY_NAME"
+            cp "$package_dir/${BINARY_NAME}-${OS}-${ARCH}" "$INSTALL_DIR/$BINARY_NAME"
         fi
         chmod +x "$INSTALL_DIR/$BINARY_NAME"
         
