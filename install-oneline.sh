@@ -66,19 +66,24 @@ else
     exit 1
 fi
 
-# Extract the binary
+# Extract the package
 if [ "$OS" = "windows" ]; then
     unzip -q "$local_filename"
-    BINARY_NAME="gomicrogen.exe"
 else
     tar -xzf "$local_filename"
-    BINARY_NAME="gomicrogen"
 fi
 
-# Find the extracted binary (exclude archive files)
-EXTRACTED_BINARY=$(find . -name "gomicrogen*" -type f ! -name "*.tar.gz" ! -name "*.zip" | head -1)
+# Find the extracted package directory
+PACKAGE_DIR=$(find . -name "gomicrogen-$OS-$ARCH-package" -type d | head -1)
+if [ -z "$PACKAGE_DIR" ]; then
+    echo "❌ Failed to extract package from archive"
+    exit 1
+fi
+
+# Find the binary in the package
+EXTRACTED_BINARY=$(find "$PACKAGE_DIR" -name "gomicrogen*" -type f ! -name "*.tar.gz" ! -name "*.zip" | head -1)
 if [ -z "$EXTRACTED_BINARY" ]; then
-    echo "❌ Failed to extract binary from archive"
+    echo "❌ Failed to find binary in package"
     exit 1
 fi
 
@@ -94,15 +99,24 @@ if [ -w "/usr/local/bin" ] || command -v sudo >/dev/null 2>&1; then
     if [ -w "/usr/local/bin" ]; then
         cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
         chmod +x "/usr/local/bin/gomicrogen"
+        # Install templates directory
+        mkdir -p "/usr/local/bin/templates"
+        cp -r "$PACKAGE_DIR/templates"/* "/usr/local/bin/templates/"
     else
         sudo cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
         sudo chmod +x "/usr/local/bin/gomicrogen"
+        # Install templates directory
+        sudo mkdir -p "/usr/local/bin/templates"
+        sudo cp -r "$PACKAGE_DIR/templates"/* "/usr/local/bin/templates/"
     fi
     echo -e "${GREEN}✅ Installed to /usr/local/bin/${NC}"
 else
     mkdir -p "$HOME/.local/bin"
     cp "$EXTRACTED_BINARY" "$HOME/.local/bin/gomicrogen"
     chmod +x "$HOME/.local/bin/gomicrogen"
+    # Install templates directory
+    mkdir -p "$HOME/.local/bin/templates"
+    cp -r "$PACKAGE_DIR/templates"/* "$HOME/.local/bin/templates/"
     echo -e "${GREEN}✅ Installed to $HOME/.local/bin/${NC}"
     echo -e "${BLUE}💡 Please add $HOME/.local/bin to your PATH${NC}"
 fi
