@@ -70,12 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Installation
 
-```bash
-# Linux/macOS
-curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install-oneline.sh | bash
+#### Linux/macOS
 
-# Windows (PowerShell)
-Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install.ps1" -UseBasicParsing).Content
+```bash
+curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
+```
+
+#### Windows (PowerShell)
+
+```powershell
+Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/surahj/gomicrogen/main/install.ps1" -UseBasicParsing).Content
 ```
 
 ### Quick Start
@@ -110,7 +114,7 @@ When contributing to this project, please update this changelog with:
 
 ## Links
 
-- [GitHub Repository](https://github.com/Choplife-group/gomicrogen)
-- [Documentation](https://github.com/Choplife-group/gomicrogen#readme)
-- [Issues](https://github.com/Choplife-group/gomicrogen/issues)
-- [Releases](https://github.com/Choplife-group/gomicrogen/releases)
+- [GitHub Repository](https://github.com/surahj/gomicrogen)
+- [Documentation](https://github.com/surahj/gomicrogen#readme)
+- [Issues](https://github.com/surahj/gomicrogen/issues)
+- [Releases](https://github.com/surahj/gomicrogen/releases)

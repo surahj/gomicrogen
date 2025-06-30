@@ -111,15 +111,15 @@ make clean         # Clean build artifacts
 
 ```bash
 # Linux/macOS
-curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install-oneline.sh | bash
+curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
 
 # Windows (PowerShell)
-Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install.ps1" -UseBasicParsing).Content
+Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/surahj/gomicrogen/main/install.ps1" -UseBasicParsing).Content
 ```
 
 #### Manual Installation
 
-- Download from [GitHub Releases](https://github.com/Choplife-group/gomicrogen/releases)
+- Download from [GitHub Releases](https://github.com/surahj/gomicrogen/releases)
 - Extract and add to PATH
 - Use `gomicrogen --help` to verify installation
 

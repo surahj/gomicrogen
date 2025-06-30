@@ -21,59 +21,56 @@ A powerful CLI tool to scaffold Go microservice projects with a predefined folde
 - Git (for repository initialization)
 - Docker (optional, for containerization)
 
-## ��️ Installation
+## 🛠️ Installation
 
 ### Quick Install (Recommended)
 
 #### Linux/macOS
 
 ```bash
-# One-liner installation
-curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install-oneline.sh | bash
+# One-liner installation (recommended)
+curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
 
 # Or download and run the full installer
-curl -fsSL https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install.sh | bash
 ```
 
 #### Windows (PowerShell)
 
 ```powershell
 # Run the PowerShell installer
-Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Choplife-group/gomicrogen/main/install.ps1" -UseBasicParsing).Content
+Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/surahj/gomicrogen/main/install.ps1" -UseBasicParsing).Content
 ```
 
 ### Manual Installation
 
-Download the appropriate binary for your platform from the [latest release](https://github.com/Choplife-group/gomicrogen/releases/latest):
+Download the appropriate binary for your platform from the [latest release](https://github.com/surahj/gomicrogen/releases/latest):
 
 #### Linux
 
 ```bash
-# AMD64
-wget https://github.com/Choplife-group/gomicrogen/releases/latest/download/gomicrogen-linux-amd64.tar.gz
+# Download and extract the package
+wget https://github.com/surahj/gomicrogen/releases/latest/download/gomicrogen-linux-amd64.tar.gz
 tar -xzf gomicrogen-linux-amd64.tar.gz
-sudo mv gomicrogen-linux-amd64 /usr/local/bin/gomicrogen
-sudo chmod +x /usr/local/bin/gomicrogen
 
-# ARM64
-wget https://github.com/Choplife-group/gomicrogen/releases/latest/download/gomicrogen-linux-arm64.tar.gz
-tar -xzf gomicrogen-linux-arm64.tar.gz
-sudo mv gomicrogen-linux-arm64 /usr/local/bin/gomicrogen
+# Install binary and templates
+sudo cp gomicrogen-linux-amd64-package/gomicrogen-linux-amd64 /usr/local/bin/gomicrogen
 sudo chmod +x /usr/local/bin/gomicrogen
+sudo mkdir -p /usr/local/bin/templates
+sudo cp -r gomicrogen-linux-amd64-package/templates/* /usr/local/bin/templates/
 ```
 
 #### macOS
 
 ```bash
-# AMD64
-curl -L https://github.com/Choplife-group/gomicrogen/releases/latest/download/gomicrogen-darwin-amd64.tar.gz | tar -xz
-sudo mv gomicrogen-darwin-amd64 /usr/local/bin/gomicrogen
-sudo chmod +x /usr/local/bin/gomicrogen
+# Download and extract the package
+curl -L https://github.com/surahj/gomicrogen/releases/latest/download/gomicrogen-darwin-amd64.tar.gz | tar -xz
 
-# ARM64 (Apple Silicon)
-curl -L https://github.com/Choplife-group/gomicrogen/releases/latest/download/gomicrogen-darwin-arm64.tar.gz | tar -xz
-sudo mv gomicrogen-darwin-arm64 /usr/local/bin/gomicrogen
+# Install binary and templates
+sudo cp gomicrogen-darwin-amd64-package/gomicrogen-darwin-amd64 /usr/local/bin/gomicrogen
 sudo chmod +x /usr/local/bin/gomicrogen
+sudo mkdir -p /usr/local/bin/templates
+sudo cp -r gomicrogen-darwin-amd64-package/templates/* /usr/local/bin/templates/
 ```
 
 #### Windows
@@ -87,7 +84,7 @@ sudo chmod +x /usr/local/bin/gomicrogen
 
 ```bash
 # Clone the repository
-git clone https://github.com/Choplife-group/gomicrogen.git
+git clone https://github.com/surahj/gomicrogen.git
 cd gomicrogen
 
 # Build the binary
@@ -103,17 +100,17 @@ sudo mv gomicrogen /usr/local/bin/
 ### Using Go Install
 
 ```bash
-go install github.com/Choplife-group/gomicrogen@latest
+go install github.com/surahj/gomicrogen@latest
 ```
 
 ### Using Docker
 
 ```bash
 # Pull the latest image
-docker pull ghcr.io/choplife-group/gomicrogen:latest
+docker pull ghcr.io/surahj/gomicrogen:latest
 
 # Run gomicrogen
-docker run --rm -it -v $(pwd):/workspace ghcr.io/choplife-group/gomicrogen:latest new my-service --module github.com/your-org/my-service
+docker run --rm -it -v $(pwd):/workspace ghcr.io/surahj/gomicrogen:latest new my-service --module github.com/your-org/my-service
 ```
 
 ## 🎯 Quick Start
@@ -158,18 +155,18 @@ gomicrogen new [service-name] [flags]
 
 #### Database Configuration
 
-- `--db-driver`: Database driver (mysql, postgres, etc.)
+- `--db-driver`: Database driver (mysql, postgres, sqlite)
 - `--db-url`: Database connection URL
-- `--db-host`: Database host
-- `--db-port`: Database port
+- `--db-host`: Database host (default: "localhost")
+- `--db-port`: Database port (3306 for MySQL, 5432 for PostgreSQL)
 - `--db-password`: Database password
 
 #### Redis Configuration
 
 - `--redis-url`: Redis connection URL
-- `--redis-host`: Redis host
-- `--redis-port`: Redis port
-- `--redis-db-number`: Redis database number
+- `--redis-host`: Redis host (default: "localhost")
+- `--redis-port`: Redis port (default: "6379")
+- `--redis-db-number`: Redis database number (0-15) (default: "0")
 - `--redis-password`: Redis password
 
 #### Output Options
@@ -212,6 +209,31 @@ gomicrogen new payment-service \
 gomicrogen new auth-service \
   --module github.com/mycompany/auth-service \
   --output-dir /path/to/projects
+```
+
+#### Force Overwrite Existing Project
+
+```bash
+gomicrogen new my-service --module github.com/myorg/my-service --force
+```
+
+#### Skip Git and Go Module Initialization
+
+```bash
+gomicrogen new my-service --module github.com/myorg/my-service --git=false --go-mod=false
+```
+
+### Getting Help
+
+```bash
+# General help
+gomicrogen --help
+
+# Command-specific help
+gomicrogen new --help
+
+# Show all available commands
+gomicrogen help
 ```
 
 ## 📁 Generated Project Structure
@@ -427,30 +449,41 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Common Issues
 
-1. **Template directory not found**
+1. **Installation fails**
 
-   - Ensure the `templates/` directory is in the same directory as the binary
-   - Or use the `--output-dir` flag to specify a different location
+   - Ensure you have write permissions to `/usr/local/bin/` or use the one-line installer
+   - Check that curl/wget is available on your system
+   - Verify your internet connection can access GitHub
 
 2. **Go module initialization fails**
 
    - Check that Go is properly installed and in your PATH
    - Ensure you have write permissions in the target directory
+   - Verify the module name follows Go module naming conventions
 
 3. **Database connection issues**
 
    - Verify database credentials and connection settings
    - Ensure the database server is running and accessible
+   - Check that the database driver is supported (mysql, postgres, sqlite)
 
 4. **Port already in use**
+
    - Use different ports with `--port` and `--grpc-port` flags
    - Check for existing services using the same ports
+   - Use `netstat -tulpn | grep :8080` to check port usage
+
+5. **Git initialization fails**
+   - Ensure Git is installed and configured
+   - Check that you have write permissions in the target directory
+   - Use `--git=false` to skip Git initialization if needed
 
 ### Getting Help
 
-- Create an issue on GitHub
+- Create an issue on [GitHub](https://github.com/surahj/gomicrogen/issues)
 - Check the existing issues for similar problems
 - Review the generated code and configuration files
+- Use `gomicrogen --help` for command-line help
 
 ## 🔗 Related Projects
 
