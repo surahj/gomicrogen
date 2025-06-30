@@ -174,7 +174,27 @@ Examples:
 		// Find templates directory
 		templatesDir := findTemplatesDir()
 		if templatesDir == "" {
-			return fmt.Errorf("templates directory not found")
+			execPath, _ := os.Executable()
+			execDir := filepath.Dir(execPath)
+
+			return fmt.Errorf(`❌ Templates directory not found
+
+🔍 Searched in the following locations:
+   • %s/templates
+   • ./templates
+   • ../templates
+   • ../../templates
+
+💡 This usually happens when:
+   • The binary was installed without templates
+   • You're running from a different directory
+   • Templates were not included in the release
+
+🛠️ Solutions:
+   • Reinstall gomicrogen: curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
+   • Download from GitHub releases: https://github.com/surahj/gomicrogen/releases
+   • Clone the repository and run from project directory: git clone https://github.com/surahj/gomicrogen && cd gomicrogen && ./gomicrogen new ...`,
+				execDir)
 		}
 
 		// Create template generator
@@ -324,6 +344,21 @@ func findTemplatesDir() string {
 	// Try to find templates in the go-template directory (for this project)
 	if _, err := os.Stat("../go-template"); err == nil {
 		return "../go-template"
+	}
+
+	// If we're in development mode, try to find templates relative to the project root
+	// Look for templates in common development locations
+	devPaths := []string{
+		"templates",
+		"../templates",
+		"../../templates",
+		"./templates",
+	}
+
+	for _, path := range devPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
 	}
 
 	return ""

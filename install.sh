@@ -85,11 +85,11 @@ download_binary() {
     local download_url=""
     
     if [ "$OS" = "windows" ]; then
-        download_url="https://github.com/$REPO/releases/download/$version/${BINARY_NAME}-${OS}-${ARCH}.exe"
-        local_filename="${BINARY_NAME}-${OS}-${ARCH}.exe"
+        download_url="https://github.com/$REPO/releases/download/$version/${BINARY_NAME}-${OS}-${ARCH}.zip"
+        local_filename="${BINARY_NAME}-${OS}-${ARCH}.zip"
     else
-        download_url="https://github.com/$REPO/releases/download/$version/${BINARY_NAME}-${OS}-${ARCH}"
-        local_filename="${BINARY_NAME}-${OS}-${ARCH}"
+        download_url="https://github.com/$REPO/releases/download/$version/${BINARY_NAME}-${OS}-${ARCH}.tar.gz"
+        local_filename="${BINARY_NAME}-${OS}-${ARCH}.tar.gz"
     fi
     
     print_status "Downloading from: $download_url"
@@ -114,11 +114,6 @@ download_binary() {
         exit 1
     fi
     
-    # Make executable (for Unix-like systems)
-    if [ "$OS" != "windows" ]; then
-        chmod +x "$local_filename"
-    fi
-    
     print_success "Download completed"
 }
 
@@ -126,21 +121,71 @@ download_binary() {
 install_binary() {
     local local_filename=$1
     
+    print_status "Extracting package..."
+    
+    # Extract the package
+    if [ "$OS" = "windows" ]; then
+        if command -v unzip >/dev/null 2>&1; then
+            unzip -q "$local_filename"
+        else
+            print_error "unzip is required but not installed. Please install unzip."
+            exit 1
+        fi
+    else
+        if command -v tar >/dev/null 2>&1; then
+            tar -xzf "$local_filename"
+        else
+            print_error "tar is required but not installed. Please install tar."
+            exit 1
+        fi
+    fi
+    
+    # Find the extracted directory
+    local package_dir=""
+    if [ "$OS" = "windows" ]; then
+        package_dir=$(find . -name "${BINARY_NAME}-${OS}-${ARCH}-package" -type d | head -1)
+    else
+        package_dir=$(find . -name "${BINARY_NAME}-${OS}-${ARCH}-package" -type d | head -1)
+    fi
+    
+    if [ -z "$package_dir" ]; then
+        print_error "Could not find extracted package directory"
+        exit 1
+    fi
+    
     print_status "Installing to $INSTALL_DIR..."
     
     # Check if we have write permissions
     if [ ! -w "$INSTALL_DIR" ] && [ "$(id -u)" != "0" ]; then
         print_warning "No write permission to $INSTALL_DIR, using sudo"
         if command -v sudo >/dev/null 2>&1; then
-            sudo cp "$local_filename" "$INSTALL_DIR/$BINARY_NAME"
+            # Install binary
+            if [ "$OS" = "windows" ]; then
+                sudo cp "$package_dir/${BINARY_NAME}.exe" "$INSTALL_DIR/$BINARY_NAME"
+            else
+                sudo cp "$package_dir/${BINARY_NAME}" "$INSTALL_DIR/$BINARY_NAME"
+            fi
             sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
+            
+            # Install templates directory
+            sudo mkdir -p "$INSTALL_DIR/templates"
+            sudo cp -r "$package_dir/templates"/* "$INSTALL_DIR/templates/"
         else
             print_error "sudo is not available. Please run this script as root or install sudo."
             exit 1
         fi
     else
-        cp "$local_filename" "$INSTALL_DIR/$BINARY_NAME"
+        # Install binary
+        if [ "$OS" = "windows" ]; then
+            cp "$package_dir/${BINARY_NAME}.exe" "$INSTALL_DIR/$BINARY_NAME"
+        else
+            cp "$package_dir/${BINARY_NAME}" "$INSTALL_DIR/$BINARY_NAME"
+        fi
         chmod +x "$INSTALL_DIR/$BINARY_NAME"
+        
+        # Install templates directory
+        mkdir -p "$INSTALL_DIR/templates"
+        cp -r "$package_dir/templates"/* "$INSTALL_DIR/templates/"
     fi
     
     print_success "Installation completed"

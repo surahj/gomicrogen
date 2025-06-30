@@ -92,12 +92,37 @@ build-all: clean ## Build for all platforms
 release: build-all ## Prepare release artifacts
 	@echo "Preparing release artifacts..."
 	mkdir -p release
-	cd dist && tar -czf ../release/${BINARY_NAME}-linux-amd64.tar.gz ${BINARY_NAME}-linux-amd64
-	cd dist && tar -czf ../release/${BINARY_NAME}-linux-arm64.tar.gz ${BINARY_NAME}-linux-arm64
-	cd dist && tar -czf ../release/${BINARY_NAME}-darwin-amd64.tar.gz ${BINARY_NAME}-darwin-amd64
-	cd dist && tar -czf ../release/${BINARY_NAME}-darwin-arm64.tar.gz ${BINARY_NAME}-darwin-arm64
-	cd dist && zip ../release/${BINARY_NAME}-windows-amd64.zip ${BINARY_NAME}-windows-amd64.exe
-	cd dist && zip ../release/${BINARY_NAME}-windows-arm64.zip ${BINARY_NAME}-windows-arm64.exe
+	
+	# Create Linux packages with templates
+	cd dist && mkdir -p ${BINARY_NAME}-linux-amd64-package && cp ${BINARY_NAME}-linux-amd64 ${BINARY_NAME}-linux-amd64-package/
+	cd dist && cp -r ../templates ${BINARY_NAME}-linux-amd64-package/
+	cd dist && tar -czf ../release/${BINARY_NAME}-linux-amd64.tar.gz ${BINARY_NAME}-linux-amd64-package/
+	
+	cd dist && mkdir -p ${BINARY_NAME}-linux-arm64-package && cp ${BINARY_NAME}-linux-arm64 ${BINARY_NAME}-linux-arm64-package/
+	cd dist && cp -r ../templates ${BINARY_NAME}-linux-arm64-package/
+	cd dist && tar -czf ../release/${BINARY_NAME}-linux-arm64.tar.gz ${BINARY_NAME}-linux-arm64-package/
+	
+	# Create macOS packages with templates
+	cd dist && mkdir -p ${BINARY_NAME}-darwin-amd64-package && cp ${BINARY_NAME}-darwin-amd64 ${BINARY_NAME}-darwin-amd64-package/
+	cd dist && cp -r ../templates ${BINARY_NAME}-darwin-amd64-package/
+	cd dist && tar -czf ../release/${BINARY_NAME}-darwin-amd64.tar.gz ${BINARY_NAME}-darwin-amd64-package/
+	
+	cd dist && mkdir -p ${BINARY_NAME}-darwin-arm64-package && cp ${BINARY_NAME}-darwin-arm64 ${BINARY_NAME}-darwin-arm64-package/
+	cd dist && cp -r ../templates ${BINARY_NAME}-darwin-arm64-package/
+	cd dist && tar -czf ../release/${BINARY_NAME}-darwin-arm64.tar.gz ${BINARY_NAME}-darwin-arm64-package/
+	
+	# Create Windows packages with templates
+	cd dist && mkdir -p ${BINARY_NAME}-windows-amd64-package && cp ${BINARY_NAME}-windows-amd64.exe ${BINARY_NAME}-windows-amd64-package/
+	cd dist && cp -r ../templates ${BINARY_NAME}-windows-amd64-package/
+	cd dist && zip -r ../release/${BINARY_NAME}-windows-amd64.zip ${BINARY_NAME}-windows-amd64-package/
+	
+	cd dist && mkdir -p ${BINARY_NAME}-windows-arm64-package && cp ${BINARY_NAME}-windows-arm64.exe ${BINARY_NAME}-windows-arm64-package/
+	cd dist && cp -r ../templates ${BINARY_NAME}-windows-arm64-package/
+	cd dist && zip -r ../release/${BINARY_NAME}-windows-arm64.zip ${BINARY_NAME}-windows-arm64-package/
+	
+	# Clean up temporary directories
+	cd dist && rm -rf ${BINARY_NAME}-*-package/
+	
 	@echo "Release artifacts created in release/ directory"
 
 # Docker builds
