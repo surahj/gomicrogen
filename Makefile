@@ -4,7 +4,8 @@
 BINARY_NAME=gomicrogen
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LDFLAGS=-ldflags "-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}"
+COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+LDFLAGS=-ldflags "-X github.com/Choplife-group/gomicrogen/cmd.appVersion=${VERSION} -X github.com/Choplife-group/gomicrogen/cmd.appCommit=${COMMIT} -X github.com/Choplife-group/gomicrogen/cmd.appDate=${BUILD_TIME}"
 
 # Default target
 help: ## Show this help message
