@@ -1,9 +1,16 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	appVersion = "dev"
+	appCommit  = "dev"
+	appDate    = ""
 )
 
 var rootCmd = &cobra.Command{
@@ -43,6 +50,7 @@ Examples:
     --output-dir /path/to/projects
 
 For detailed help on any command, use: gomicrogen [command] --help`,
+	Version: fmt.Sprintf("%s-%s (%s)", appVersion, appCommit, appDate),
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -59,4 +67,18 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringP("config", "c", "", "config file (default is $HOME/.gomicrogen.yaml)")
+
+	// Make built-in --version also available as -v
+	if f := rootCmd.Flags().Lookup("version"); f != nil && f.Shorthand == "" {
+		f.Shorthand = "v"
+	}
+
+	// Explicit version subcommand so users can run: gomicrogen version
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Printf("gomicrogen %s-%s (%s)\n", appVersion, appCommit, appDate)
+		},
+	})
 }
