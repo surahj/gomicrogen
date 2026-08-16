@@ -1,0 +1,149 @@
+package router
+
+import (
+	"net"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	xrate "golang.org/x/time/rate"
+)
+
+const metricsPath = "/metrics"
+
+// skipMetrics keeps the Prometheus scrape path out of the rate limiter
+func skipMetrics(c echo.Context) bool {
+
+	return c.Path() == metricsPath
+}
+
+var clientIPHeaders = []string{
+	"X-Original-Client-Ip",
+	"X-Client-Ip",
+	"Cf-Connecting-Ip",
+	"True-Client-Ip",
+}
+
+func parsePublicIP(v string) string {
+
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "[")
+	v = strings.TrimSuffix(v, "]")
+
+	ip := net.ParseIP(v)
+	if ip == nil || ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() {
+		return ""
+	}
+
+	return ip.String()
+}
+
+// ExtractIPFromRealIPHeader resolves the real client IP, not the upstream proxy
+func ExtractIPFromRealIPHeader(options ...echo.TrustOption) echo.IPExtractor {
+
+	return func(req *http.Request) string {
+
+		// 1. trusted single-value client-IP headers, first public one wins
+		for _, h := range clientIPHeaders {
+			if ip := parsePublicIP(req.Header.Get(h)); ip != "" {
+				return ip
+			}
+		}
+
+		// 2. X-Forwarded-For: leftmost public entry is the original client
+		if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+			for _, part := range strings.Split(xff, ",") {
+				if ip := parsePublicIP(part); ip != "" {
+					return ip
+				}
+			}
+		}
+
+		// 3. fall back to the L3 peer (SplitHostPort handles IPv4 & IPv6)
+		if host, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+			return host
+		}
+
+		return req.RemoteAddr
+	}
+}
+
+// CustomRateLimiterConfig is the global rate limit applied to every route
+func CustomRateLimiterConfig() middleware.RateLimiterConfig {
+
+	rate := getEnvInt("RATE_LIMIT", 20)
+	burst := getEnvInt("RATE_LIMIT_BURST", 5)
+	expiresIn := getEnvDuration("RATE_LIMIT_EXPIRES_IN_SECONDS", 5*time.Second)
+
+	return customRateLimiterConfig(xrate.Limit(rate), burst, expiresIn)
+}
+
+// CustomStrictRateLimiterConfig is a tighter per-route limit for sensitive
+// routes such as login, OTP and password reset
+func CustomStrictRateLimiterConfig() middleware.RateLimiterConfig {
+
+	rate := getEnvInt("STRICT_RATE_LIMIT", 5)
+	burst := getEnvInt("STRICT_RATE_LIMIT_BURST", 3)
+	expiresIn := getEnvDuration("STRICT_RATE_LIMIT_EXPIRES_IN_SECONDS", 60*time.Second)
+
+	return customRateLimiterConfig(xrate.Limit(rate), burst, expiresIn)
+}
+
+func getEnvInt(key string, defaultValue int) int {
+
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultValue
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+
+	return parsed
+}
+
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultValue
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+func customRateLimiterConfig(rate xrate.Limit, burst int, expiresIn time.Duration) middleware.RateLimiterConfig {
+
+	return middleware.RateLimiterConfig{
+
+		Skipper: skipMetrics,
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+
+			middleware.RateLimiterMemoryStoreConfig{Rate: rate, Burst: burst, ExpiresIn: expiresIn},
+		),
+
+		IdentifierExtractor: func(ctx echo.Context) (string, error) {
+
+			return ctx.RealIP(), nil
+
+		},
+		ErrorHandler: func(context echo.Context, err error) error {
+			return context.JSON(http.StatusForbidden, nil)
+		},
+		DenyHandler: func(context echo.Context, identifier string, err error) error {
+			return context.JSON(http.StatusTooManyRequests, nil)
+		},
+	}
+
+}

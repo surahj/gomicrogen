@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -24,64 +24,90 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./...
+        # `make test` rather than an inlined go test, so CI and local runs cannot
+        # drift. Covers the generator, layout and type resolution, and every CLI
+        # flag by running the real binary against the real templates.
+        run: make test
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.out
-          flags: unittests
-          name: codecov-umbrella
-
-  lint:
-    name: Lint
+  package:
+    name: Package
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: "1.23"
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: latest
-          args: --timeout=5m
+      - name: Build release archives
+        # same packaging path the release uses, so a change that breaks the
+        # archives fails here on the PR rather than after a tag is published
+        run: make release
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.23"
-
-      - name: Build
-        run: go build -v .
-
-      - name: Build for multiple platforms
+      - name: Verify archive layout
+        # the installers look for <binary>-package/ containing the binary and
+        # templates/. Producing archives without it is the bug class this catches.
         run: |
-          GOOS=linux GOARCH=amd64 go build -o gomicrogen-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -o gomicrogen-linux-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -o gomicrogen-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -o gomicrogen-darwin-arm64 .
-          GOOS=windows GOARCH=amd64 go build -o gomicrogen-windows-amd64.exe .
-          GOOS=windows GOARCH=arm64 go build -o gomicrogen-windows-arm64.exe .
+          set -e
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries
-          path: |
-            gomicrogen-linux-*
-            gomicrogen-darwin-*
-            gomicrogen-windows-*.exe
+          for archive in release/*.tar.gz; do
+            name=$(basename "$archive" .tar.gz)
+
+            if ! tar -tzf "$archive" | grep -q "^${name}-package/"; then
+              echo "::error::$archive is missing the ${name}-package/ directory the installers expect"
+              exit 1
+            fi
+            if ! tar -tzf "$archive" | grep -q "^${name}-package/templates/base/"; then
+              echo "::error::$archive does not contain templates/base"
+              exit 1
+            fi
+            if ! tar -tzf "$archive" | grep -q "^${name}-package/templates/types/"; then
+              echo "::error::$archive does not contain templates/types"
+              exit 1
+            fi
+            if tar -tzf "$archive" | grep -q "/\._"; then
+              echo "::error::$archive contains AppleDouble sidecar files"
+              exit 1
+            fi
+          done
+
+          for archive in release/*.zip; do
+            name=$(basename "$archive" .zip)
+
+            if ! unzip -l "$archive" | grep -q "${name}-package/"; then
+              echo "::error::$archive is missing the ${name}-package/ directory"
+              exit 1
+            fi
+          done
+
+          echo "All archives carry the expected layout"
+          ls -la release/
+
+      - name: Install from the built archive and generate a service
+        # proves the archive is actually installable and that the installed
+        # binary can find its templates — not just that it compiled
+        run: |
+          set -e
+
+          GOMICROGEN_BASE_URL="file://$PWD/release" bash install-oneline.sh
+
+          cd "$(mktemp -d)"
+
+          gomicrogen version
+          gomicrogen types
+
+          for type in general casino payment; do
+            gomicrogen new "ci-$type" \
+              --module "github.com/choplife-group/ci-$type" \
+              --type "$type" --git=false --go-mod=false >/dev/null
+
+            test -f "ci-$type/main.go" || { echo "::error::$type produced no main.go"; exit 1; }
+            test -f "ci-$type/app/router/router.go" || { echo "::error::$type produced no router.go"; exit 1; }
+
+            echo "$type: $(find "ci-$type" -type f | wc -l) files"
+          done

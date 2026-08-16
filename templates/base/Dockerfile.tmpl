@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.24-alpine
+
+# Install tzdata and swag early
+RUN apk add --no-cache tzdata && \
+    go install github.com/swaggo/swag/cmd/swag@latest
+
+ENV TZ=Africa/Abidjan
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+WORKDIR /app
+
+# Copy only the go.mod and go.sum files first
+COPY go.mod go.sum* ./
+
+# Download dependencies. Do not tidy here: with no source files in the image yet,
+# tidy would prune every requirement and empty go.sum
+RUN go mod download
+
+# Now copy the rest of the source code
+COPY . .
+
+# Resolve and vendor dependencies now that the source is present
+RUN go mod tidy && go mod vendor
+
+# Generate swagger docs from root directory
+RUN swag init
+
+# Build the application
+RUN go build -o /{{ .ServiceName }}
+
+EXPOSE 8080 8081
+
+CMD ["/{{ .ServiceName }}"] 

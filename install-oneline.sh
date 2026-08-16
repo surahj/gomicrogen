@@ -42,12 +42,15 @@ if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
     LATEST_VERSION="latest"
 fi
 
-# Download URL
+# Download URL. GOMICROGEN_BASE_URL overrides where archives are fetched from,
+# for testing the installer against a local build or an internal mirror.
+BASE_URL="${GOMICROGEN_BASE_URL:-https://github.com/$REPO/releases/download/$LATEST_VERSION}"
+
 if [ "$OS" = "windows" ]; then
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-windows-$ARCH.zip"
+    DOWNLOAD_URL="$BASE_URL/gomicrogen-windows-$ARCH.zip"
     local_filename="gomicrogen-windows-$ARCH.zip"
 else
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH.tar.gz"
+    DOWNLOAD_URL="$BASE_URL/gomicrogen-$OS-$ARCH.tar.gz"
     local_filename="gomicrogen-$OS-$ARCH.tar.gz"
 fi
 
@@ -100,12 +103,14 @@ if [ -w "/usr/local/bin" ] || command -v sudo >/dev/null 2>&1; then
         cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
         chmod +x "/usr/local/bin/gomicrogen"
         # Install templates directory
+        rm -rf "/usr/local/bin/templates"
         mkdir -p "/usr/local/bin/templates"
         cp -r "$PACKAGE_DIR/templates"/* "/usr/local/bin/templates/"
     else
         sudo cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
         sudo chmod +x "/usr/local/bin/gomicrogen"
         # Install templates directory
+        sudo rm -rf "/usr/local/bin/templates"
         sudo mkdir -p "/usr/local/bin/templates"
         sudo cp -r "$PACKAGE_DIR/templates"/* "/usr/local/bin/templates/"
     fi
@@ -115,6 +120,7 @@ else
     cp "$EXTRACTED_BINARY" "$HOME/.local/bin/gomicrogen"
     chmod +x "$HOME/.local/bin/gomicrogen"
     # Install templates directory
+    rm -rf "$HOME/.local/bin/templates"
     mkdir -p "$HOME/.local/bin/templates"
     cp -r "$PACKAGE_DIR/templates"/* "$HOME/.local/bin/templates/"
     echo -e "${GREEN}✅ Installed to $HOME/.local/bin/${NC}"

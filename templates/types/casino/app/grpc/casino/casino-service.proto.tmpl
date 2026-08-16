@@ -1,0 +1,233 @@
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+option go_package = "{{ .ModuleName }}/app/grpc/casino";
+package protobuf;
+
+service Casino {
+  rpc GetTotalBetAmountByGameAndMonth(GetTotalBetAmountByGameAndMonthRequest) returns (GetTotalBetAmountByGameAndMonthResponse) {}
+  rpc BetSummary(ProfileIDRequest) returns (CasinoBetSummaryResponse) {}
+	rpc GetGame(GetGameRequest) returns (CasinoGameResponse) {}
+  rpc CreateGame(CreateGameRequest) returns (CasinoResponse) {}
+  rpc CreateJackpots(CreateJackpotRequest) returns (CasinoResponse) {}
+	rpc CreateFreeSpin(CreateFreeSpinRequest) returns (FreeSpinResponse) {}
+  rpc Authenticate(TokenRequest) returns (GetWalletResponse) {}
+  rpc VerifyToken(TokenRequest) returns (CasinoResponse) {}
+  rpc GetWallet(ProfileIDRequest) returns (GetWalletResponse) {}
+  rpc GetWalletV2(GetWalletRequest) returns (GetWalletResponse) {}
+  rpc Debit(CasinoDebitRequest) returns (TransactionResponse) {}
+  rpc DebitV2(CasinoDebitRequestV2) returns (TransactionResponse) {}
+  rpc Credit(CasinoCreditRequest) returns (TransactionResponse) {}
+  rpc CreditV2(CasinoCreditRequest) returns (TransactionResponse) {}
+  rpc Adjust(CasinoAdjustRequest) returns (TransactionResponse) {}
+  rpc Cancel(CancelRequest) returns (TransactionResponse) {}
+  rpc CancelV2(CancelRequest) returns (TransactionResponse) {}
+  rpc Settlement(SettlementRequest) returns (CasinoResponse) {}
+  rpc Ping (CasinoPing) returns (CasinoPong) {}
+}
+
+message CasinoPing {}
+
+message CasinoPong {
+  int64 status = 1;
+  string data = 2;
+}
+
+message ProfileIDRequest {
+  int64 profileId = 1;
+}
+
+message GetWalletRequest {
+  int64 profileId = 1;
+  int32 launchMode = 2;
+  string gameId = 3;
+  int32 providerId = 4;
+}
+
+message CasinoResponse {
+  int32 status = 1;
+  string description = 2;
+}
+
+message CasinoBetSummaryResponse {
+  int64 numberOfBets = 1;
+  double stake = 2;
+  double winning = 3;
+}
+
+message CreateGameRequest {
+  string category = 1;    
+	int32 providerId = 2;
+	string providerName = 3;
+	string gameId = 4;
+	string gameName = 5;
+	string image = 6;
+	string description = 7;
+	bool demo = 8;
+	int32 type = 9;
+}
+
+message Jackpot {
+	int64 ProviderID = 1;
+	string JackpotID = 2;
+	string Name = 3;
+	int64 Amount = 4;
+	string Games = 5;
+	int64 Status = 6;
+}
+
+message CreateJackpotRequest {
+  repeated Jackpot jackpots = 1;
+}
+
+message GetWalletResponse {
+  int32 status = 1;
+  string description = 2;
+  int64 id = 3;
+  string displayName = 4;
+  double balance = 5;
+  double bonus = 6;
+}
+
+message TokenRequest {
+  string token = 1;
+}
+
+message CasinoDebitRequest {
+	int64 profileId = 1;
+	int64 providerId = 2;
+	string providerName = 3;
+	string gameName = 4;
+	string gameId = 5;
+	int32 gameType = 6;
+	string transactionId = 7;
+	double amount = 8;
+	string sessionId = 9;
+	string roundId = 10;
+  string ipAddress = 11;
+}
+
+message CasinoDebitRequestV2 {
+	int64 profileId = 1;
+	int32 providerId = 2;
+	string providerName = 3;
+	string gameName = 4;
+	string gameId = 5;
+	int32 gameType = 6;
+	string transactionId = 7;
+	double amount = 8;
+  int32 launchMode = 9;
+	string sessionId = 10;
+	string roundId = 11;
+  string ipAddress = 12;
+}
+
+message TransactionResponse {
+	int64 status = 1;
+  string description = 2;
+	int64 betID = 3;
+	double balance = 4;
+	double bonusBalance = 5;
+	int64 transactionID = 6;
+	int64 bonusBet = 7;
+	double minimumCashout = 8;
+	double maximumWinning = 9;
+}
+
+message CasinoCreditRequest {
+	int64 profileId = 1;
+	int64 providerId = 2;
+	string providerName = 3;
+	string gameName = 4;
+	string gameId = 5;
+	string transactionId = 6;
+	double amount = 7;
+  int64 betId = 8;
+	string sessionId = 9;
+	string roundId = 10;
+  float odds = 11;
+  string ipAddress = 12;
+}
+
+message CasinoAdjustRequest {
+	int64 profileId = 1;
+	int64 providerId = 2;
+	string providerName = 3;
+	string gameName = 4;
+	string gameId = 5;
+	string transactionId = 6;
+  double amount = 7; // if amount <= -1, debit wallet else credit wallet
+  string description = 8;
+  string ipAddress = 9;
+  int64 betId = 10;
+}
+
+message CancelRequest {
+	int64 profileId = 1;
+  int64 betId = 2;
+	string gameName = 3;
+	int64 walletTransactionId = 4;
+  string ipAddress = 5;
+}
+
+message SettlementRequest {
+	int64 status = 1;
+  int64 betId = 2;
+}
+
+message CreateFreeSpinRequest {
+	string gameId = 1;
+	int64 providerId = 2;
+	double amount = 3;
+	int32 numberOfSpins = 4;
+	repeated int64 profileIds = 5;
+	string start = 6;
+	string end = 7;
+	string reason = 8;
+}
+
+message FreeSpinResponse {
+  int32 status = 1;
+  string description = 2;
+	int64 freeSpinId = 3;
+}
+
+message GetGameRequest {
+	string gameId = 1;
+	int32 providerId = 2;
+}
+
+message CasinoGameResponse {
+	int32 status = 1;
+  string description = 2;
+	string name = 3;
+	string slugId = 4;
+	int32 providerId = 5;
+	string image = 6;
+	int32 gameStatus = 7;
+}
+
+message GetTotalBetAmountByGameAndMonthRequest {
+  int64 profileId = 1;
+  string gameId = 2;
+  int32 providerId = 3;
+  string month = 4; // format: "YYYY-MM" (e.g., "2026-01")
+}
+
+message GetTotalBetAmountByGameAndMonthResponse {
+  double totalAmount = 1;
+  int32 status = 2;
+  string description = 3;
+}

@@ -59,4 +59,7 @@ coverage.out
 coverage.html
 
 # Air live reload temporary files
-tmp/ 
+tmp/
+
+# Local planning notes
+files/ 

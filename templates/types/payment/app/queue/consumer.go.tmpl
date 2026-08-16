@@ -1,0 +1,108 @@
+package queue
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+
+	"{{ .ModuleName }}/app/constants"
+	"{{ .ModuleName }}/app/rabbitmq"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/sirupsen/logrus"
+)
+
+type Consumer struct {
+	conn    *amqp.Connection
+	channel *amqp.Channel
+	tag     string
+	done    chan error
+}
+
+func (q *Queue) RouteMessage(ctx context.Context, deliveries <-chan amqp.Delivery, queue string) error {
+
+	log.Printf("route message for queue %s", queue)
+
+	prefix := os.Getenv("QUEUE_PREFIX")
+
+	if len(prefix) > 0 {
+
+		parts := strings.Split(queue, ".")
+
+		if len(parts) > 1 {
+
+			queue = strings.Join(parts[1:], ".")
+		}
+	}
+
+	queue = strings.ToLower(queue)
+
+	// TODO: dispatch each queue to its handler
+	//
+	//	if strings.HasPrefix(queue, "withdraw") {
+	//		return q.ProcessWithdrawal(ctx, deliveries)
+	//	}
+	log.Printf("no handler registered for queue %s", queue)
+
+	return nil
+}
+
+func (c *Consumer) Shutdown() error {
+
+	// will close() the deliveries channel
+	if err := c.channel.Cancel(c.tag, true); err != nil {
+
+		return fmt.Errorf("consumer cancel failed: %s", err)
+	}
+
+	if err := c.conn.Close(); err != nil {
+
+		return fmt.Errorf("AMQP connection close error: %s", err)
+	}
+
+	// wait for handle() to exit
+	return <-c.done
+}
+
+func (q *Queue) SetupQueue(ctx context.Context, QueueName string, prefetchCount int) {
+
+	forever := make(chan bool)
+
+	conn := rabbitmq.NewConnection(q.Tracer, QueueName, 5, prefetchCount)
+
+	if err := conn.Connect(ctx, q.RabbitMqConnection); err != nil {
+
+		logrus.WithContext(ctx).
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "error during conn.Connect ",
+				constants.DATA:        QueueName,
+			}).
+			Panic(err.Error())
+
+	}
+
+	if err := conn.BindQueue(ctx); err != nil {
+
+		logrus.WithContext(ctx).
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "error during conn.BindQueue  ",
+				constants.DATA:        QueueName,
+			}).
+			Panic(err.Error())
+	}
+
+	err := conn.Consume(ctx, q.RouteMessage)
+	if err != nil {
+
+		logrus.WithContext(ctx).
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "error during conn.Consume  ",
+				constants.DATA:        QueueName,
+			}).
+			Panic(err.Error())
+	}
+
+	<-forever
+
+}

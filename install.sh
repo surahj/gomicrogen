@@ -84,11 +84,15 @@ download_binary() {
     local version=$1
     local download_url=""
     
+    # GOMICROGEN_BASE_URL overrides where archives are fetched from, for testing
+    # the installer against a local build or an internal mirror
+    local base_url="${GOMICROGEN_BASE_URL:-https://github.com/$REPO/releases/download/$version}"
+
     if [ "$OS" = "windows" ]; then
-        download_url="https://github.com/$REPO/releases/download/$version/${BINARY_NAME}-${OS}-${ARCH}.zip"
+        download_url="${base_url}/${BINARY_NAME}-${OS}-${ARCH}.zip"
         local_filename="${BINARY_NAME}-${OS}-${ARCH}.zip"
     else
-        download_url="https://github.com/$REPO/releases/download/$version/${BINARY_NAME}-${OS}-${ARCH}.tar.gz"
+        download_url="${base_url}/${BINARY_NAME}-${OS}-${ARCH}.tar.gz"
         local_filename="${BINARY_NAME}-${OS}-${ARCH}.tar.gz"
     fi
     
@@ -167,7 +171,9 @@ install_binary() {
             fi
             sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
             
-            # Install templates directory
+            # Install templates directory. Replace rather than merge, so an
+            # upgrade does not leave stale files from an older layout behind.
+            sudo rm -rf "$INSTALL_DIR/templates"
             sudo mkdir -p "$INSTALL_DIR/templates"
             sudo cp -r "$package_dir/templates"/* "$INSTALL_DIR/templates/"
         else
@@ -183,7 +189,9 @@ install_binary() {
         fi
         chmod +x "$INSTALL_DIR/$BINARY_NAME"
         
-        # Install templates directory
+        # Install templates directory. Replace rather than merge, so an upgrade
+        # does not leave stale files from an older layout behind.
+        rm -rf "$INSTALL_DIR/templates"
         mkdir -p "$INSTALL_DIR/templates"
         cp -r "$package_dir/templates"/* "$INSTALL_DIR/templates/"
     fi
