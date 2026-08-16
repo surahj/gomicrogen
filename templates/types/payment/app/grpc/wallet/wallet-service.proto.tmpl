@@ -1,0 +1,138 @@
+syntax = "proto3";
+option go_package = "{{ .ModuleName }}/app/grpc/wallet";
+package protobuf;
+
+service Wallet {
+  rpc Ping (WalletPing) returns (WalletPong) {}
+  rpc PreCheckDeposit (PreCheckDepositRequest) returns (WalletResponse) {}
+  rpc Deposit (DepositRequest) returns (DepositResponse) {}
+  rpc UpdateDepositStatus (UpdateDepositStatusRequest) returns (WalletResponse) {}
+  rpc PreCheckWithdrawal (PreCheckWithdrawalRequest) returns (PreCheckWithdrawalResponse) {}
+  rpc Withdraw (WithdrawalRequest) returns (WalletResponse) {}
+  rpc GetPendingWithdrawal (GetPendingWithdrawalRequest) returns (GetPendingWithdrawalResponse) {}
+  rpc ApprovePendingWithdrawal (GetPendingWithdrawalRequest) returns (WalletResponse) {}
+  rpc ReverseWithdrawal (ReverseWithdrawalRequest) returns (WalletResponse) {}
+  rpc ProcessDepositWebhook (DepositWebhookRequest) returns (WebhookResponse) {}
+  rpc ProcessWithdrawalWebhook (WithdrawalWebhookRequest) returns (WebhookResponse) {}
+}
+
+message WalletPing {}
+
+message WalletPong {
+  int64 Status = 1;
+  string Data = 2;
+}
+
+message WalletResponse {
+  int32 Status = 1;
+  string Description = 2;
+}
+
+message DepositResponse {
+  int32 Status = 1;
+  string Description = 2;
+  int64 TransactionID = 3;
+}
+
+message PreCheckDepositRequest {
+  int64 profileID = 1;
+  double amount = 2;
+  string paymentMethod = 3;
+  int32 providerId = 4;
+  string locale = 5;
+}
+
+message DepositRequest {
+  int64 profileID = 1;
+  int64 transactionID = 2;
+  double amount = 3;
+  string paymentMethod = 4;
+  string phoneNumber = 5;
+  int32 providerId = 6;
+  string ipAddress = 7;
+  string reference = 8;
+  string trackingUrl = 9;
+  string locale = 10;
+  string gaClientId = 11;
+  string campaignMetadata = 12;
+}
+
+message PreCheckWithdrawalRequest {
+  int64 profileID = 1;
+  double amount = 2;
+  string paymentMethod = 3;
+  string phoneNumber = 4;
+  int32 providerId = 5;
+  string ipAddress = 6;
+  string locale = 7;
+}
+
+message PreCheckWithdrawalResponse {
+  int32 status = 1;
+  string description = 2;
+}
+
+message WithdrawalRequest {
+  int64 profileID = 1;
+  double amount = 2;
+  string paymentMethod = 3;
+  string phoneNumber = 4;
+  int32 providerId = 5;
+  string ipAddress = 6;
+  string reference = 7;
+  int64 transactionId = 8;
+  string locale = 9;
+}
+
+message ReverseWithdrawalRequest {
+  string reference = 1;
+  string description = 2;
+  string ipAddress = 3;
+  string failureReason = 4;
+}
+
+message WebhookResponse {
+  int32 status = 1;
+  string description = 2;
+}
+
+message WithdrawalWebhookRequest {
+  int64 transactionID = 1;
+  int32 status = 2;
+  int32 providerId = 3;
+  string failureReason = 4;
+}
+
+message DepositWebhookRequest {
+  int64 profileId = 1;
+  double amount = 2;
+  string phoneNumber = 3;
+  string reference = 4;
+  string ipAddress = 5;
+  int32 status = 6;
+  string paymentMethod = 7;
+  int32 providerId = 8;
+  string providerName = 9;
+  int64 transactionId = 10;
+  string failureReason = 11;
+}
+
+message UpdateDepositStatusRequest {
+  int32 id = 1;
+  int32 status = 2;
+}
+
+message GetPendingWithdrawalRequest {
+  int64 id = 1;
+}
+
+message GetPendingWithdrawalResponse {
+  int32 status = 1;
+  string description = 2;
+  int64 profileId = 3;
+  double amount = 4;
+  string ipAddress = 5;
+  int32 providerId = 6;
+  string paymentMethod = 7;
+  string phoneNumber = 8;
+}

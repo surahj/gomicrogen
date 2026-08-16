@@ -88,17 +88,18 @@ jobs:
         run: |
           mkdir -p release
 
-          # Create tar.gz for Unix-like systems
+          # The binary is useless without the templates it renders from, and
+          # install.sh copies templates/ out of the extracted archive
           for binary in gomicrogen-linux-* gomicrogen-darwin-*; do
             if [ -f "$binary" ]; then
-              tar -czf "release/${binary}.tar.gz" "$binary"
+              tar -czf "release/${binary}.tar.gz" "$binary" templates
             fi
           done
 
           # Create zip for Windows
           for binary in gomicrogen-windows-*.exe; do
             if [ -f "$binary" ]; then
-              zip "release/${binary%.exe}.zip" "$binary"
+              zip -r "release/${binary%.exe}.zip" "$binary" templates
             fi
           done
 

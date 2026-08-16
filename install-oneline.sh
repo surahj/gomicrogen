@@ -100,12 +100,14 @@ if [ -w "/usr/local/bin" ] || command -v sudo >/dev/null 2>&1; then
         cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
         chmod +x "/usr/local/bin/gomicrogen"
         # Install templates directory
+        rm -rf "/usr/local/bin/templates"
         mkdir -p "/usr/local/bin/templates"
         cp -r "$PACKAGE_DIR/templates"/* "/usr/local/bin/templates/"
     else
         sudo cp "$EXTRACTED_BINARY" "/usr/local/bin/gomicrogen"
         sudo chmod +x "/usr/local/bin/gomicrogen"
         # Install templates directory
+        sudo rm -rf "/usr/local/bin/templates"
         sudo mkdir -p "/usr/local/bin/templates"
         sudo cp -r "$PACKAGE_DIR/templates"/* "/usr/local/bin/templates/"
     fi
@@ -115,6 +117,7 @@ else
     cp "$EXTRACTED_BINARY" "$HOME/.local/bin/gomicrogen"
     chmod +x "$HOME/.local/bin/gomicrogen"
     # Install templates directory
+    rm -rf "$HOME/.local/bin/templates"
     mkdir -p "$HOME/.local/bin/templates"
     cp -r "$PACKAGE_DIR/templates"/* "$HOME/.local/bin/templates/"
     echo -e "${GREEN}✅ Installed to $HOME/.local/bin/${NC}"

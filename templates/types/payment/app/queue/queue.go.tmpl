@@ -1,0 +1,80 @@
+package queue
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/go-redis/redis"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel/trace"
+)
+
+type Queue struct {
+	RabbitMqConnection *amqp.Connection
+	DB                 *sql.DB
+	RedisConn          *redis.Client
+	Tracer             trace.Tracer
+}
+
+/*
+*
+initialize rabbitMQ connections and start all the consumers
+*/
+func (q *Queue) InitQueues(ctx context.Context) {
+
+	// get websocket instance
+	queues := os.Getenv("QUEUES")
+
+	// get all the queues to consume from
+	parts := strings.Split(queues, ",")
+	sort.Strings(parts)
+
+	// GetRabbitMQConnection returns nil when the broker is unreachable, and the
+	// consumer would dereference it
+	if q.RabbitMqConnection == nil {
+
+		log.Printf("no rabbitmq connection, not starting consumers")
+
+		return
+	}
+
+	// loop through the array
+	for _, que := range parts {
+
+		// remove any spaces
+		que = strings.ToLower(strings.TrimSpace(que))
+
+		// strings.Split yields one empty element for an empty QUEUES
+		if que == "" {
+			continue
+		}
+
+		// get number of workers/threads/consumers
+		// convert into int
+		numberOfWorkers, err := strconv.Atoi(os.Getenv(fmt.Sprintf("%s_workers", que)))
+		if err != nil {
+
+			numberOfWorkers = 1
+			log.Printf(" cant retrieve %s workers got error %s ", que, err.Error())
+		}
+
+		x := 0
+
+		for x < numberOfWorkers {
+
+			// for each worker create a goroutine (thread/ run in background)
+			go q.SetupQueue(ctx, que, 1)
+			x++
+		}
+
+	}
+
+	select {}
+
+}

@@ -1,0 +1,146 @@
+package publisher
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
+	"os"
+)
+
+// Publisher is the connection created
+type Publisher struct {
+	conn *amqp.Connection
+	err  chan error
+}
+
+func GetPublisher() *Publisher {
+
+	pub := Publisher{}
+	err := pub.Connect()
+	if err != nil {
+
+		log.Printf("failed to create publisher %s ", err.Error())
+		panic(err)
+	}
+
+	return &pub
+
+}
+
+func (c *Publisher) Connect() error {
+
+	host := os.Getenv("RABBITMQ_HOST")
+	user := os.Getenv("RABBITMQ_USER")
+	pass := os.Getenv("RABBITMQ_PASS")
+	port := os.Getenv("RABBITMQ_PORT")
+	vhost := os.Getenv("RABBITMQ_VHOST")
+
+	amqpURI := fmt.Sprintf("amqp://%s:%s@%s:%s/%s", user, pass, host, port, vhost)
+
+	var err error
+	c.conn, err = amqp.Dial(amqpURI)
+	if err != nil {
+
+		return fmt.Errorf("error in creating rabbitmq connection with %s : %s", amqpURI, err.Error())
+	}
+
+	go func() {
+
+		<-c.conn.NotifyClose(make(chan *amqp.Error)) //Listen to NotifyClose
+		c.err <- errors.New("connection Closed")
+	}()
+
+	return nil
+}
+
+// Reconnect reconnects the connection
+func (c *Publisher) Reconnect() error {
+
+	if err := c.Connect(); err != nil {
+
+		return err
+	}
+
+	return nil
+}
+
+func (c *Publisher) Publish(ctx context.Context, name string, payload interface{}, priority uint8) error {
+
+	select { //non blocking channel - if there is no error will go to default where we do nothing
+	case err := <-c.err:
+		if err != nil {
+
+			err := c.Reconnect()
+			if err != nil {
+
+				log.Printf(" got error reconnecting rabbitMQ channel %s ", err.Error())
+				return err
+			}
+
+		}
+
+	default:
+
+	}
+
+	ch, err := c.conn.Channel()
+	if err != nil {
+
+		log.Printf(" got error opening rabbitMQ channel %s ", err.Error())
+		return err
+	}
+
+	defer ch.Close()
+
+	queue := name
+	exchange := name
+	key := name
+	exchangeType := "direct"
+
+	err = ch.ExchangeDeclare(
+		queue,        // name
+		exchangeType, // type
+		true,         // durable
+		false,        // auto-deleted
+		false,        // internal
+		false,        // no-wait
+		nil,          // arguments
+	)
+
+	if err != nil {
+
+		log.Printf(" got error Failed to declare a queue %s error %s ", name, err.Error())
+		return err
+	}
+
+	message, err := json.Marshal(payload)
+
+	if err != nil {
+
+		log.Printf(" got error decoding payload to string %s ", err.Error())
+		return err
+	}
+
+	err = ch.PublishWithContext(
+		ctx,
+		exchange, // exchange
+		key,      // routing key
+		false,    // mandatory
+		false,    // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        message,
+			Priority:    priority,
+		})
+
+	if err != nil {
+
+		log.Printf(" got error publishing message %s error %s ", message, err.Error())
+		return err
+	}
+
+	return nil
+}

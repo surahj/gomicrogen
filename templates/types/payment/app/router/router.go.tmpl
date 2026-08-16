@@ -1,0 +1,195 @@
+package router
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"os"
+
+	"{{ .ModuleName }}/app/controllers"
+	db "{{ .ModuleName }}/app/database"
+	"{{ .ModuleName }}/app/publisher"
+	"{{ .ModuleName }}/app/queue"
+	observability "github.com/choplife-group/go-utils/observability"
+	"github.com/go-redis/redis"
+	"github.com/gorilla/sessions"
+	"github.com/labstack/echo-contrib/session"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/sirupsen/logrus"
+	echoSwagger "github.com/swaggo/echo-swagger"
+	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+// router and DB instance
+type App struct {
+	E               *echo.Echo
+	DB              *sql.DB
+	RedisConn       *redis.Client
+	GlobalRedisConn *redis.Client
+	Publisher       *publisher.Publisher
+	Controller      *controllers.Controller
+}
+
+// Initialize initializes the app with predefined configuration
+func (a *App) Initialize(tr trace.Tracer, ctx context.Context, dbInstance *sql.DB) {
+
+	_, span := tr.Start(ctx, "Initialize")
+	defer span.End()
+
+	// init webserver
+	a.E = echo.New()
+	a.E.Static("/doc", "api")
+
+	// resolve the real client IP from the proxy headers
+	a.E.IPExtractor = ExtractIPFromRealIPHeader()
+
+	// add recovery middleware to make the system null safe
+	a.E.Use(middleware.Recover()) // change due to swagger
+	a.E.Use(session.Middleware(sessions.NewCookieStore([]byte(os.Getenv("SESSION_SECRET")))))
+
+	// request id so the access log can correlate requests
+	a.E.Use(middleware.RequestID())
+
+	a.E.Use(otelecho.Middleware("{{ .ServiceName }}"))
+
+	// Instrument logrus.
+	logrus.AddHook(otellogrus.NewHook(otellogrus.WithLevels(
+		logrus.PanicLevel,
+		logrus.FatalLevel,
+		logrus.ErrorLevel,
+		logrus.WarnLevel,
+		logrus.InfoLevel,
+		logrus.DebugLevel,
+		logrus.TraceLevel,
+	)))
+
+	// JSON logging, access log, gzip and the Prometheus /metrics endpoint
+	observability.Setup(a.E, observability.Options{})
+
+	allowedMethods := []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete, http.MethodOptions}
+	AllowOrigins := []string{"*"}
+
+	//setup CORS
+	corsConfig := middleware.CORSConfig{
+		AllowOrigins: AllowOrigins, // in production limit this to only known hosts
+		AllowHeaders: AllowOrigins,
+		AllowMethods: allowedMethods,
+	}
+	a.E.Use(middleware.CORSWithConfig(corsConfig))
+
+	// global rate limiter middleware, keyed on the resolved client IP
+	a.E.Use(middleware.RateLimiterWithConfig(CustomRateLimiterConfig()))
+
+	a.DB = dbInstance
+	a.RedisConn = db.RedisClient()
+
+	// identity-service writes auth tokens here, so auth reads this, not RedisConn
+	a.GlobalRedisConn = db.GlobalRedisClient()
+
+	pub := publisher.GetPublisher()
+	a.Publisher = pub
+
+	// wallet-service owns the player balance. Generate app/grpc/wallet from the
+	// proto, then dial it once here and share the client with the queue and the
+	// controller rather than dialling per consumer:
+	//
+	//	walletServiceClient := NewWalletServiceClient(os.Getenv("WALLET_SERVICE_ENDPOINT"))
+
+	q := queue.Queue{
+		RabbitMqConnection: db.GetRabbitMQConnection(),
+		DB:                 dbInstance,
+		RedisConn:          a.RedisConn,
+		Tracer:             tr,
+	}
+
+	go q.InitQueues(ctx)
+
+	controller := controllers.Controller{
+		DB:              dbInstance,
+		RedisConn:       a.RedisConn,
+		GlobalRedisConn: a.GlobalRedisConn,
+		Tracer:          tr,
+		Publisher:       pub,
+	}
+
+	a.Controller = &controller
+
+	go a.GRPCRun()
+
+	a.setRouters()
+}
+
+// setRouters sets the all required router
+func (a *App) setRouters() {
+
+	// public
+	a.E.GET("/docs/*", echoSwagger.WrapHandler)
+
+	// status
+	a.E.POST("/", a.GetStatus)
+	a.E.GET("/", a.GetStatus)
+}
+
+// Run the app on it's router
+func (a *App) Run() {
+
+	server := fmt.Sprintf("%s:%s", os.Getenv("SYSTEM_HOST"), os.Getenv("SYSTEM_PORT"))
+
+	log.Printf("HTTP listening on... %s", server)
+
+	a.E.Logger.Fatal(a.E.Start(server))
+}
+
+// GRPCRun setup GRPC endpoints. Register this service's own server before
+// serving, e.g. wallet.RegisterWalletServer(s, a)
+func (a *App) GRPCRun() {
+
+	host := os.Getenv("SYSTEM_HOST")
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	port := os.Getenv("SYSTEM_GRPC_PORT")
+	if port == "" {
+		port = "{{ .GRPCPort }}"
+	}
+
+	server := fmt.Sprintf("%s:%s", host, port)
+
+	lis, err := net.Listen("tcp", server)
+	if err != nil {
+		log.Fatalf("Failed to listen... %v", err)
+	}
+
+	s := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
+
+	log.Printf("gRPC server listening at %v", lis.Addr())
+
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve... %v", err)
+	}
+}
+
+// getGrpcConn dials another service over gRPC with tracing propagated
+func getGrpcConn(target string) *grpc.ClientConn {
+
+	conn, err := grpc.NewClient(target,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		log.Fatalf("Did not connect to %s... %v", target, err)
+	}
+
+	return conn
+}

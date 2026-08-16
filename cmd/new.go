@@ -15,16 +15,14 @@ import (
 var (
 	moduleName          string
 	description         string
+	serviceType         string
 	version             string
-	author              string
+	databaseDriver      string
 	port                string
 	grpcPort            string
-	databaseDriver      string
-	databaseURL         string
 	databaseHost        string
 	databasePort        string
 	databasePassword    string
-	redisURL            string
 	redisHost           string
 	redisPort           string
 	redisDatabaseNumber string
@@ -102,75 +100,6 @@ Examples:
 			targetDir = filepath.Join(cwd, serviceName)
 		}
 
-		// Check if directory already exists
-		if err := checkExistingService(serviceName, targetDir); err != nil {
-			if !forceOverwrite {
-				return err
-			} else {
-				fmt.Printf("⚠️  Service '%s' already exists. Overwriting due to --force flag...\n", serviceName)
-				// Remove existing directory
-				if err := os.RemoveAll(targetDir); err != nil {
-					return fmt.Errorf("failed to remove existing directory %s: %w", targetDir, err)
-				}
-			}
-		}
-
-		// Create service configuration
-		serviceConfig := config.NewServiceConfig(serviceName)
-
-		// Override defaults with provided flags
-		if moduleName != "" {
-			serviceConfig.ModuleName = moduleName
-		}
-		if description != "" {
-			serviceConfig.Description = description
-		}
-		if version != "" {
-			serviceConfig.Version = version
-		}
-		if author != "" {
-			serviceConfig.Author = author
-		}
-		if port != "" {
-			serviceConfig.Port = port
-		}
-		if grpcPort != "" {
-			serviceConfig.GRPCPort = grpcPort
-		}
-		if databaseDriver != "" {
-			serviceConfig.DatabaseDriver = databaseDriver
-		}
-		if databaseURL != "" {
-			serviceConfig.DatabaseURL = databaseURL
-		}
-		if databaseHost != "" {
-			serviceConfig.DatabaseHost = databaseHost
-		}
-		if databasePort != "" {
-			serviceConfig.DatabasePort = databasePort
-		}
-		if databasePassword != "" {
-			serviceConfig.DatabasePassword = databasePassword
-		}
-		if redisURL != "" {
-			serviceConfig.RedisURL = redisURL
-		}
-		if redisHost != "" {
-			serviceConfig.RedisHost = redisHost
-		}
-		if redisPort != "" {
-			serviceConfig.RedisPort = redisPort
-		}
-		if redisDatabaseNumber != "" {
-			serviceConfig.RedisDatabaseNumber = redisDatabaseNumber
-		}
-		if redisPassword != "" {
-			serviceConfig.RedisPassword = redisPassword
-		}
-		if environment != "" {
-			serviceConfig.Environment = environment
-		}
-
 		// Find templates directory
 		templatesDir := findTemplatesDir()
 		if templatesDir == "" {
@@ -197,8 +126,87 @@ Examples:
 				execDir)
 		}
 
+		// Resolve the templates layout and the requested service type BEFORE
+		// touching the target directory, so a mistyped --type can never trigger
+		// the --force removal below
+		layout := generator.ResolveLayout(templatesDir)
+
+		canonicalType, overlayDir, err := layout.ResolveType(serviceType)
+		if err != nil {
+			return err
+		}
+
+		// Check if directory already exists
+		if err := checkExistingService(serviceName, targetDir); err != nil {
+			if !forceOverwrite {
+				return err
+			} else {
+				fmt.Printf("⚠️  Service '%s' already exists. Overwriting due to --force flag...\n", serviceName)
+				// Remove existing directory
+				if err := os.RemoveAll(targetDir); err != nil {
+					return fmt.Errorf("failed to remove existing directory %s: %w", targetDir, err)
+				}
+			}
+		}
+
+		// Create service configuration
+		serviceConfig := config.NewServiceConfig(serviceName)
+		serviceConfig.Type = canonicalType
+
+		// Override defaults with provided flags
+		if moduleName != "" {
+			serviceConfig.ModuleName = moduleName
+		}
+		if description != "" {
+			serviceConfig.Description = description
+		}
+		if version != "" {
+			serviceConfig.Version = version
+		}
+		if port != "" {
+			serviceConfig.Port = port
+		}
+		if grpcPort != "" {
+			serviceConfig.GRPCPort = grpcPort
+		}
+		if databaseDriver != "" {
+
+			if err := config.ValidateDriver(databaseDriver); err != nil {
+				return err
+			}
+
+			serviceConfig.DatabaseDriver = databaseDriver
+
+			// the conventional port follows the driver unless --db-port says otherwise
+			serviceConfig.DatabasePort = config.DefaultDatabasePort(databaseDriver)
+		}
+		if databaseHost != "" {
+			serviceConfig.DatabaseHost = databaseHost
+		}
+		if databasePort != "" {
+			serviceConfig.DatabasePort = databasePort
+		}
+		if databasePassword != "" {
+			serviceConfig.DatabasePassword = databasePassword
+		}
+		if redisHost != "" {
+			serviceConfig.RedisHost = redisHost
+		}
+		if redisPort != "" {
+			serviceConfig.RedisPort = redisPort
+		}
+		if redisDatabaseNumber != "" {
+			serviceConfig.RedisDatabaseNumber = redisDatabaseNumber
+		}
+		if redisPassword != "" {
+			serviceConfig.RedisPassword = redisPassword
+		}
+		if environment != "" {
+			serviceConfig.Environment = environment
+		}
+
 		// Create template generator
-		gen := generator.NewTemplateGenerator(templatesDir, serviceConfig)
+		gen := generator.NewTemplateGenerator(layout, overlayDir, serviceConfig)
 
 		// Generate the service
 		fmt.Printf("Generating %s microservice...\n", serviceName)
@@ -285,22 +293,20 @@ func init() {
 	newCmd.MarkFlagRequired("module")
 
 	// Service configuration flags
+	newCmd.Flags().StringVarP(&serviceType, "type", "t", "general", typeFlagUsage())
 	newCmd.Flags().StringVarP(&description, "description", "d", "", "Service description (e.g., 'User management microservice')")
 	newCmd.Flags().StringVarP(&version, "version", "v", "1.0.0", "Service version (e.g., '2.1.0')")
-	newCmd.Flags().StringVarP(&author, "author", "a", "", "Author name (e.g., 'John Doe')")
 	newCmd.Flags().StringVarP(&port, "port", "p", "8080", "HTTP port for the service")
 	newCmd.Flags().StringVarP(&grpcPort, "grpc-port", "g", "8081", "gRPC port for the service")
 	newCmd.Flags().StringVarP(&environment, "env", "e", "development", "Environment (development, staging, production)")
 
 	// Database configuration flags
-	newCmd.Flags().StringVarP(&databaseDriver, "db-driver", "", "", "Database driver (mysql, postgres, sqlite)")
-	newCmd.Flags().StringVarP(&databaseURL, "db-url", "", "", "Database connection URL (overrides individual db settings)")
+	newCmd.Flags().StringVarP(&databaseDriver, "db-driver", "", "mysql", "Database driver (mysql, postgres)")
 	newCmd.Flags().StringVarP(&databaseHost, "db-host", "", "localhost", "Database host")
 	newCmd.Flags().StringVarP(&databasePort, "db-port", "", "", "Database port (3306 for MySQL, 5432 for PostgreSQL)")
 	newCmd.Flags().StringVarP(&databasePassword, "db-password", "", "", "Database password")
 
 	// Redis configuration flags
-	newCmd.Flags().StringVarP(&redisURL, "redis-url", "", "", "Redis connection URL (overrides individual redis settings)")
 	newCmd.Flags().StringVarP(&redisHost, "redis-host", "", "localhost", "Redis host")
 	newCmd.Flags().StringVarP(&redisPort, "redis-port", "", "6379", "Redis port")
 	newCmd.Flags().StringVarP(&redisDatabaseNumber, "redis-db-number", "", "0", "Redis database number (0-15)")
@@ -311,6 +317,36 @@ func init() {
 	newCmd.Flags().BoolVarP(&initGit, "git", "", true, "Initialize Git repository with dev branch")
 	newCmd.Flags().BoolVarP(&runGoMod, "go-mod", "", true, "Run go mod init and go mod tidy")
 	newCmd.Flags().BoolVarP(&forceOverwrite, "force", "", false, "Force overwrite if service already exists")
+}
+
+// typeFlagUsage builds the --type help text. Cobra assembles usage strings at
+// init(), before the templates directory is known, so this is best-effort: when
+// discovery fails it points at the types subcommand instead.
+func typeFlagUsage() string {
+
+	const fallback = "Service type; run 'gomicrogen types' to list available types"
+
+	templatesDir := findTemplatesDir()
+	if templatesDir == "" {
+		return fallback
+	}
+
+	names := []string{generator.GeneralType}
+
+	for _, t := range generator.ResolveLayout(templatesDir).Types() {
+
+		if t.Name == generator.GeneralType {
+			continue
+		}
+
+		names = append(names, t.Name)
+	}
+
+	if len(names) == 1 {
+		return fallback
+	}
+
+	return fmt.Sprintf("Service type: %s", strings.Join(names, ", "))
 }
 
 // findTemplatesDir finds the templates directory relative to the executable
@@ -379,9 +415,10 @@ func initializeGoModule(targetDir, moduleName string) error {
 		return err
 	}
 
-	// Check if go.mod already exists
-	goModPath := filepath.Join(targetDir, "go.mod")
-	if _, err := os.Stat(goModPath); err == nil {
+	// Check if go.mod already exists. This is relative to the working directory,
+	// which is now targetDir: joining targetDir again would break for a relative
+	// --output-dir and send us down the go mod init path on a module that exists.
+	if _, err := os.Stat("go.mod"); err == nil {
 		// go.mod already exists, just run go mod tidy
 		fmt.Println("📁 go.mod already exists, running go mod tidy...")
 		cmd := exec.Command("go", "mod", "tidy")
@@ -501,8 +538,8 @@ dist/
 docker-compose-local.yml
 `
 
-	gitignorePath := filepath.Join(targetDir, ".gitignore")
-	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
+	// relative to the working directory, which is now targetDir
+	if err := os.WriteFile(".gitignore", []byte(gitignoreContent), 0644); err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
 	}
 	fmt.Println("📁 Created .gitignore")

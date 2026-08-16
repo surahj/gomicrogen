@@ -167,7 +167,9 @@ install_binary() {
             fi
             sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
             
-            # Install templates directory
+            # Install templates directory. Replace rather than merge, so an
+            # upgrade does not leave stale files from an older layout behind.
+            sudo rm -rf "$INSTALL_DIR/templates"
             sudo mkdir -p "$INSTALL_DIR/templates"
             sudo cp -r "$package_dir/templates"/* "$INSTALL_DIR/templates/"
         else
@@ -183,7 +185,9 @@ install_binary() {
         fi
         chmod +x "$INSTALL_DIR/$BINARY_NAME"
         
-        # Install templates directory
+        # Install templates directory. Replace rather than merge, so an upgrade
+        # does not leave stale files from an older layout behind.
+        rm -rf "$INSTALL_DIR/templates"
         mkdir -p "$INSTALL_DIR/templates"
         cp -r "$package_dir/templates"/* "$INSTALL_DIR/templates/"
     fi
