@@ -20,6 +20,11 @@ func TestShouldSkipFile(t *testing.T) {
 		{"nested macOS metadata", "app/router/.DS_Store", true},
 		{"a tmp directory in the template tree", "tmp/thing.go", true},
 		{"a nested tmp directory", "app/tmp/thing.go", true},
+		// a macOS-built tar extracted on Linux leaves these beside every file,
+		// and they would otherwise be copied into the generated service
+		{"AppleDouble sidecar", "._Makefile", true},
+		{"nested AppleDouble sidecar", "app/router/._router.go", true},
+		{"AppleDouble overlay manifest", "._type.json", true},
 		{"ordinary Go file", "app/router/router.go", false},
 		{"template file", "main.go.tmpl", false},
 		// generated protobuf must reach the service: the overlays ship gRPC clients

@@ -37,6 +37,18 @@ curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-onel
 curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install.sh | bash
 ```
 
+Verified on Ubuntu 22.04, Debian 12 and Alpine 3.19. On Alpine, pipe to `sh`
+instead — the base image has no `bash`:
+
+```sh
+apk add --no-cache curl tar
+curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | sh
+```
+
+Both installers accept `GOMICROGEN_BASE_URL` to fetch archives from somewhere
+other than GitHub releases, which is useful for an internal mirror or for testing
+a build before publishing it.
+
 #### Windows (PowerShell)
 
 ```powershell
@@ -92,11 +104,18 @@ cd gomicrogen
 # Build the binary
 go build -o gomicrogen
 
-# Make it executable
-chmod +x gomicrogen
+# Run it from the clone — it finds ./templates
+./gomicrogen new my-service --module github.com/choplife-group/my-service
+```
 
-# Move to a directory in your PATH (optional)
-sudo mv gomicrogen /usr/local/bin/
+To put it on your PATH, install the templates alongside it. The binary reads
+templates from disk at generation time, so moving it on its own leaves it unable
+to generate anything:
+
+```bash
+sudo cp gomicrogen /usr/local/bin/
+sudo rm -rf /usr/local/bin/templates
+sudo cp -r templates /usr/local/bin/templates
 ```
 
 ### Using Go Install
@@ -539,6 +558,53 @@ the real templates. The end-to-end suite spins up MySQL, Postgres, Redis and Rab
 testcontainers, then generates, compiles, runs and drives each service type over HTTP.
 
 See [test/README.md](test/README.md) for what each tier asserts.
+
+## 📦 Releasing
+
+Releases are triggered manually, so merging to `main` never publishes by accident.
+
+From **Actions → Tag and Release → Run workflow**, or with the `gh` CLI:
+
+```bash
+# tag and publish in one go
+gh workflow run tag.yml -f version=v1.1.0
+
+# tag now, publish later
+gh workflow run tag.yml -f version=v1.1.0 -f create_release=false
+
+# publish a release for a tag that already exists
+gh workflow run tag.yml -f version=v1.1.0 -f create_tag=false
+
+# let it work out the next version from the latest tag
+gh workflow run tag.yml -f bump=patch
+```
+
+### Tag examples
+
+| tag | when |
+|---|---|
+| `v1.0.0` | first stable release |
+| `v1.0.3` | patch — bug fixes only |
+| `v1.1.0` | minor — a new flag or service type, backwards compatible |
+| `v2.0.0` | major — a breaking change, such as a removed flag or a template layout change |
+
+Pushing a tag by hand also publishes a release:
+
+```bash
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin v1.1.0
+```
+
+Both paths run the same job, which runs the tests, builds every platform with
+`make release`, and **verifies each archive contains the `<binary>-package/`
+directory and `templates/`** before publishing — the installers abort without them,
+so a broken archive fails the release instead of shipping.
+
+To build archives locally without publishing:
+
+```bash
+make release      # writes release/*.tar.gz and release/*.zip
+```
 
 ## 🤝 Contributing
 

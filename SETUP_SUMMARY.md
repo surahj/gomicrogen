@@ -1,262 +1,140 @@
-# gomicrogen Deployment Setup Summary
+# gomicrogen Build and Release Setup
 
-This document summarizes the complete deployment and build setup that has been implemented for the gomicrogen CLI tool.
+Maintainer-facing summary of how gomicrogen is built, tested, packaged and released.
+For usage, see [README.md](README.md).
 
-## 🎯 What's Been Set Up
+## The one invariant
 
-### 1. Build System
+**gomicrogen reads its templates from disk at generation time.** The binary on its own
+cannot generate anything. Everything below exists to keep the binary and its `templates/`
+directory together:
 
-#### Makefile
+- Release archives contain a `gomicrogen-<os>-<arch>-package/` directory holding both.
+- The installers look for exactly that directory and copy `templates/` next to the binary.
+- CI and the release workflow both verify the layout before anything is published.
 
-- **Location**: `Makefile`
-- **Features**:
-  - Cross-platform builds (Linux, macOS, Windows)
-  - Development and production targets
-  - Testing and linting
-  - Docker builds
-  - Release preparation
-  - Installation and uninstallation
+An archive without it produces `❌ Failed to extract package from archive` at install time.
 
-#### Key Commands
+## Build system
+
+`Makefile` is the single packaging path — CI calls it rather than reimplementing packaging.
 
 ```bash
-make help          # Show all available commands
-make build         # Build for current platform
-make build-all     # Build for all platforms
-make release       # Prepare release artifacts
-make install       # Install to /usr/local/bin
-make test          # Run tests
-make clean         # Clean build artifacts
+make build         # current platform
+make build-all     # all six platform/arch combinations into dist/
+make release       # dist/ -> release/*.tar.gz and release/*.zip, with templates
+make test          # fast suite: generator + every CLI flag, no docker
+make test-e2e      # end-to-end: real MySQL/Postgres/Redis/RabbitMQ via testcontainers
+make test-all      # both
+make clean
 ```
 
-### 2. Installation Scripts
+Version information is stamped in through ldflags:
 
-#### Linux/macOS Installation
-
-- **One-liner**: `install-oneline.sh`
-- **Full installer**: `install.sh`
-- **Features**:
-  - Automatic platform detection
-  - Latest version fetching
-  - Automatic PATH management
-  - Error handling and cleanup
-  - Colored output
-
-#### Windows Installation
-
-- **PowerShell script**: `install.ps1`
-- **Features**:
-  - Windows-specific installation
-  - PATH environment management
-  - User-friendly error messages
-  - Automatic cleanup
-
-### 3. CI/CD Pipeline
-
-#### GitHub Actions Workflows
-
-##### CI Workflow (`.github/workflows/ci.yml`)
-
-- **Triggers**: PRs and pushes to main/develop
-- **Jobs**:
-  - Test: Run tests with coverage
-  - Lint: Code linting with golangci-lint
-  - Build: Cross-platform builds
-- **Artifacts**: Upload build binaries
-
-##### Release Workflow (`.github/workflows/release.yml`)
-
-- **Triggers**: Tag pushes (v\*)
-- **Jobs**:
-  - Build: Matrix build for all platforms
-  - Release: Create GitHub release with artifacts
-- **Output**: Release archives (tar.gz, zip)
-
-### 4. Docker Support
-
-#### Dockerfile
-
-- **Multi-stage build**: Optimized for size
-- **Security**: Non-root user
-- **Platform**: Alpine Linux base
-- **Usage**: Containerized CLI tool
-
-### 5. Documentation
-
-#### Updated README.md
-
-- **Installation methods**: Multiple options for different platforms
-- **Quick start guide**: Easy getting started
-- **Usage examples**: Comprehensive examples
-- **Platform support**: Clear platform matrix
-
-#### Deployment Guide (`DEPLOYMENT.md`)
-
-- **Release process**: Step-by-step instructions
-- **Distribution methods**: Multiple distribution options
-- **Troubleshooting**: Common issues and solutions
-- **Monitoring**: Health checks and metrics
-
-#### Changelog (`CHANGELOG.md`)
-
-- **Version tracking**: Semantic versioning
-- **Change documentation**: Structured changelog
-- **Release notes**: Detailed feature descriptions
-
-## 🚀 How to Use
-
-### For Users
-
-#### Quick Installation
-
-```bash
-# Linux/macOS
-curl -fsSL https://raw.githubusercontent.com/surahj/gomicrogen/main/install-oneline.sh | bash
-
-# Windows (PowerShell)
-Invoke-Expression (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/surahj/gomicrogen/main/install.ps1" -UseBasicParsing).Content
+```
+-X github.com/Choplife-group/gomicrogen/cmd.appVersion=${VERSION}
+-X github.com/Choplife-group/gomicrogen/cmd.appCommit=${COMMIT}
+-X github.com/Choplife-group/gomicrogen/cmd.appDate=${BUILD_TIME}
 ```
 
-#### Manual Installation
+`VERSION` comes from `git describe --tags`, and the release workflow overrides it with the
+tag being built (`make release VERSION=v1.2.3`). The variables live in the `cmd` package —
+stamping `main.version` silently does nothing.
 
-- Download from [GitHub Releases](https://github.com/surahj/gomicrogen/releases)
-- Extract and add to PATH
-- Use `gomicrogen --help` to verify installation
+macOS note: the tar steps set `COPYFILE_DISABLE=1`. Without it, macOS stores extended
+attributes that GNU tar materialises as `._*` files on extraction, which then get copied
+into every generated service.
 
-### For Maintainers
+## Installation scripts
 
-#### Development
+| script | platform |
+|---|---|
+| `install-oneline.sh` | Linux/macOS, the documented one-liner |
+| `install.sh` | Linux/macOS, verbose installer with flags |
+| `install.ps1` | Windows PowerShell |
+
+All install the binary **and** `templates/`, replacing any existing templates directory
+rather than merging into it, so an upgrade cannot leave stale files from an older layout.
+
+`GOMICROGEN_BASE_URL` overrides where archives are fetched from — used to test an installer
+against a local `make release` build, or to serve from an internal mirror:
 
 ```bash
-# Build locally
-make build
+GOMICROGEN_BASE_URL="file://$PWD/release" bash install-oneline.sh
+```
 
-# Run tests
+Verified on Ubuntu 22.04, Debian 12 and Alpine 3.19. Alpine has no `bash`, so the one-liner
+must be piped to `sh` there.
+
+## CI/CD
+
+### `.github/workflows/ci.yml` — on PRs and pushes to main
+
+- **test** — `go test -race ./...`
+- **package** — runs `make release`, verifies every archive has its `-package/` directory,
+  `templates/base`, `templates/types` and no AppleDouble files, then installs from the built
+  archive and generates one service of each type
+
+The package job exists because packaging bugs used to surface only after a release was
+published. It now fails the PR instead.
+
+### `.github/workflows/release.yml` — on tag push, and callable
+
+Runs the tests, builds every platform with `make release`, verifies the archive layout, and
+publishes the GitHub release. It is also a reusable workflow (`workflow_call`) so the manual
+tag workflow shares the same packaging steps.
+
+### `.github/workflows/tag.yml` — manual
+
+Tagging is deliberate: merging to main never publishes.
+
+```bash
+gh workflow run tag.yml -f version=v1.1.0                          # tag and release
+gh workflow run tag.yml -f version=v1.1.0 -f create_release=false  # tag only
+gh workflow run tag.yml -f version=v1.1.0 -f create_tag=false      # release an existing tag
+gh workflow run tag.yml -f bump=patch                              # v1.0.2 -> v1.0.3
+```
+
+It calls `release.yml` directly rather than relying on the tag push to trigger it — a tag
+pushed with `GITHUB_TOKEN` does not fire other workflows.
+
+Tag examples: `v1.0.3` patch (fixes), `v1.1.0` minor (a new flag or service type),
+`v2.0.0` major (a removed flag or a template layout change).
+
+## Release artifacts
+
+```
+gomicrogen-linux-amd64.tar.gz     gomicrogen-darwin-amd64.tar.gz
+gomicrogen-linux-arm64.tar.gz     gomicrogen-darwin-arm64.tar.gz
+gomicrogen-windows-amd64.zip      gomicrogen-windows-arm64.zip
+```
+
+Each expands to:
+
+```
+gomicrogen-<os>-<arch>-package/
+├── gomicrogen-<os>-<arch>        # the binary
+└── templates/
+    ├── base/                     # shared by every service type
+    └── types/{general,casino,payment}/
+```
+
+## Releasing by hand
+
+If the workflows are unavailable:
+
+```bash
 make test
-
-# Format code
-make fmt
-
-# Lint code
-make lint
+make release            # archives land in release/
+# upload release/* to a GitHub release
 ```
 
-#### Creating a Release
+Before uploading, confirm an archive extracts to a `-package/` directory containing
+`templates/base` and `templates/types`.
 
-```bash
-# 1. Prepare release
-make test
-make lint
-make fmt
+## Not covered here
 
-# 2. Create and push tag
-git tag v1.0.0
-git push origin v1.0.0
-
-# 3. GitHub Actions will automatically:
-#    - Build all platforms
-#    - Create release
-#    - Upload artifacts
-```
-
-#### Manual Release (if needed)
-
-```bash
-# Build release artifacts
-make release
-
-# Upload to GitHub Releases manually
-# Files will be in release/ directory
-```
-
-## 📦 Release Artifacts
-
-### Generated Files
-
-- `gomicrogen-linux-amd64.tar.gz`
-- `gomicrogen-linux-arm64.tar.gz`
-- `gomicrogen-darwin-amd64.tar.gz`
-- `gomicrogen-darwin-arm64.tar.gz`
-- `gomicrogen-windows-amd64.zip`
-- `gomicrogen-windows-arm64.zip`
-
-### Installation Scripts
-
-- `install-oneline.sh` - One-liner for Linux/macOS
-- `install.sh` - Full installer for Linux/macOS
-- `install.ps1` - PowerShell installer for Windows
-
-## 🔧 Configuration
-
-### Environment Variables
-
-- `VERSION` - Set by git tags
-- `BUILD_TIME` - Set during build
-- `GOOS` - Target operating system
-- `GOARCH` - Target architecture
-
-### Build Flags
-
-- `-ldflags "-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}"`
-- Cross-platform compilation with `GOOS` and `GOARCH`
-
-## 🎉 Benefits
-
-### For Users
-
-- **Easy Installation**: One-liner installation
-- **Cross-platform**: Works on Linux, macOS, Windows
-- **Automatic Updates**: Scripts fetch latest versions
-- **Multiple Options**: Various installation methods
-
-### For Maintainers
-
-- **Automated Releases**: GitHub Actions handle everything
-- **Quality Assurance**: Automated testing and linting
-- **Easy Distribution**: Multiple distribution channels
-- **Version Management**: Semantic versioning with changelog
-
-### For the Project
-
-- **Professional Setup**: Production-ready deployment
-- **Scalable**: Easy to add new platforms
-- **Maintainable**: Clear documentation and processes
-- **Reliable**: Automated testing and validation
-
-## 📋 Next Steps
-
-1. **Create First Release**:
-
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-
-2. **Test Installation Scripts**:
-
-   - Test on different platforms
-   - Verify PATH management
-   - Check error handling
-
-3. **Monitor Releases**:
-
-   - Check GitHub Actions logs
-   - Verify release artifacts
-   - Test installation from releases
-
-4. **Optional Enhancements**:
-   - Add to package managers (Homebrew, Snap, Chocolatey)
-   - Set up Docker Hub publishing
-   - Add release signing
-   - Implement auto-update mechanism
-
-## 🎯 Success Metrics
-
-- ✅ Cross-platform builds working
-- ✅ Installation scripts functional
-- ✅ CI/CD pipeline configured
-- ✅ Documentation complete
-- ✅ Release process automated
-- ✅ User-friendly installation
-
-The gomicrogen CLI tool is now ready for production deployment with a complete, professional-grade build and deployment system!
+- Package managers (Homebrew, Snap, Chocolatey)
+- Release signing and checksums
+- Docker Hub publishing
+- Any auto-update mechanism

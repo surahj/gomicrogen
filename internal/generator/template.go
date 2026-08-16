@@ -132,6 +132,14 @@ func shouldSkipFile(path string) bool {
 		"tmp", // Temporary files
 	}
 
+	// AppleDouble sidecars. A tar created on macOS stores extended attributes,
+	// and GNU tar materialises them as ._<name> files on extraction — so an
+	// installed templates/ directory can carry them even though the repository
+	// does not. Without this they are copied into every generated service.
+	if strings.HasPrefix(fileName, "._") {
+		return true
+	}
+
 	// Check if any path segment is a skip directory. Segment matching, rather
 	// than a substring search, so a directory merely containing the name is kept
 	// and a skip directory at the root of the template tree is still caught.

@@ -42,12 +42,15 @@ if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
     LATEST_VERSION="latest"
 fi
 
-# Download URL
+# Download URL. GOMICROGEN_BASE_URL overrides where archives are fetched from,
+# for testing the installer against a local build or an internal mirror.
+BASE_URL="${GOMICROGEN_BASE_URL:-https://github.com/$REPO/releases/download/$LATEST_VERSION}"
+
 if [ "$OS" = "windows" ]; then
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-windows-$ARCH.zip"
+    DOWNLOAD_URL="$BASE_URL/gomicrogen-windows-$ARCH.zip"
     local_filename="gomicrogen-windows-$ARCH.zip"
 else
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_VERSION/gomicrogen-$OS-$ARCH.tar.gz"
+    DOWNLOAD_URL="$BASE_URL/gomicrogen-$OS-$ARCH.tar.gz"
     local_filename="gomicrogen-$OS-$ARCH.tar.gz"
 fi
 

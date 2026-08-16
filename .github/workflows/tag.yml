@@ -1,0 +1,149 @@
+name: Tag and Release
+
+# Manual trigger, so merging to main never cuts a release by accident.
+#
+# Run it from Actions > Tag and Release > Run workflow, or with the gh CLI:
+#
+#   # tag and publish a release
+#   gh workflow run tag.yml -f version=v1.1.0
+#
+#   # tag only, publish later
+#   gh workflow run tag.yml -f version=v1.1.0 -f create_release=false
+#
+#   # bump without naming the version — v1.0.2 becomes v1.0.3
+#   gh workflow run tag.yml -f bump=patch
+#
+# Tag examples:
+#   v1.0.0   first stable release
+#   v1.0.3   patch    — bug fixes only
+#   v1.1.0   minor    — new flags or service types, backwards compatible
+#   v2.0.0   major    — breaking change, e.g. a removed flag or template layout
+#
+# Publishing a release for a tag that already exists is fine: leave version set
+# and create_tag false.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag to create, e.g. v1.1.0 (leave blank to use bump)"
+        required: false
+        type: string
+      bump:
+        description: "Bump the latest tag instead of naming a version"
+        required: false
+        default: none
+        type: choice
+        options:
+          - none
+          - patch
+          - minor
+          - major
+      create_tag:
+        description: "Create and push the tag"
+        required: false
+        default: true
+        type: boolean
+      create_release:
+        description: "Build and publish the release"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  tag:
+    name: Create tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: resolve
+        run: |
+          set -e
+
+          version="${{ inputs.version }}"
+          bump="${{ inputs.bump }}"
+
+          if [ -n "$version" ] && [ "$bump" != "none" ]; then
+            echo "::error::Set either version or bump, not both"
+            exit 1
+          fi
+
+          if [ -z "$version" ]; then
+
+            if [ "$bump" = "none" ]; then
+              echo "::error::Provide a version (e.g. v1.1.0) or choose a bump"
+              exit 1
+            fi
+
+            latest=$(git tag --list 'v*' --sort=-v:refname | head -1)
+            if [ -z "$latest" ]; then
+              latest="v0.0.0"
+            fi
+            echo "Latest tag: $latest"
+
+            major=$(echo "${latest#v}" | cut -d. -f1)
+            minor=$(echo "${latest#v}" | cut -d. -f2)
+            patch=$(echo "${latest#v}" | cut -d. -f3)
+
+            case "$bump" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+            esac
+
+            version="v${major}.${minor}.${patch}"
+          fi
+
+          # v1.2.3, or a prerelease such as v1.2.3-rc1 / v1.2.3-beta. A tag with a
+          # suffix publishes as a prerelease, so it never becomes "latest" and the
+          # installers, which resolve releases/latest, will not pick it up.
+          if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag must look like v1.2.3 or v1.2.3-rc1, got '$version'"
+            exit 1
+          fi
+
+          echo "tag=$version" >> $GITHUB_OUTPUT
+          echo "Resolved tag: $version"
+
+      - name: Create and push tag
+        if: ${{ inputs.create_tag }}
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -e
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          echo "Pushed $TAG"
+
+  release:
+    name: Release
+    needs: tag
+    if: ${{ inputs.create_release }}
+    # reuses the tag-triggered workflow, so archives are built and verified by
+    # exactly the same steps either way
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: write

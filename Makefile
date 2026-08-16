@@ -26,7 +26,7 @@ clean: ## Clean build artifacts
 
 test: ## Run the fast test suite (no docker, no network)
 	@echo "Running tests..."
-	go test ./...
+	go test -race ./...
 
 test-verbose: ## Run the fast suite showing every case
 	go test -v ./...
@@ -106,20 +106,20 @@ release: build-all ## Prepare release artifacts
 	# Create Linux packages with templates
 	cd dist && mkdir -p ${BINARY_NAME}-linux-amd64-package && cp ${BINARY_NAME}-linux-amd64 ${BINARY_NAME}-linux-amd64-package/
 	cd dist && cp -r ../templates ${BINARY_NAME}-linux-amd64-package/
-	cd dist && tar -czf ../release/${BINARY_NAME}-linux-amd64.tar.gz ${BINARY_NAME}-linux-amd64-package/
+	cd dist && COPYFILE_DISABLE=1 tar -czf ../release/${BINARY_NAME}-linux-amd64.tar.gz ${BINARY_NAME}-linux-amd64-package/
 	
 	cd dist && mkdir -p ${BINARY_NAME}-linux-arm64-package && cp ${BINARY_NAME}-linux-arm64 ${BINARY_NAME}-linux-arm64-package/
 	cd dist && cp -r ../templates ${BINARY_NAME}-linux-arm64-package/
-	cd dist && tar -czf ../release/${BINARY_NAME}-linux-arm64.tar.gz ${BINARY_NAME}-linux-arm64-package/
+	cd dist && COPYFILE_DISABLE=1 tar -czf ../release/${BINARY_NAME}-linux-arm64.tar.gz ${BINARY_NAME}-linux-arm64-package/
 	
 	# Create macOS packages with templates
 	cd dist && mkdir -p ${BINARY_NAME}-darwin-amd64-package && cp ${BINARY_NAME}-darwin-amd64 ${BINARY_NAME}-darwin-amd64-package/
 	cd dist && cp -r ../templates ${BINARY_NAME}-darwin-amd64-package/
-	cd dist && tar -czf ../release/${BINARY_NAME}-darwin-amd64.tar.gz ${BINARY_NAME}-darwin-amd64-package/
+	cd dist && COPYFILE_DISABLE=1 tar -czf ../release/${BINARY_NAME}-darwin-amd64.tar.gz ${BINARY_NAME}-darwin-amd64-package/
 	
 	cd dist && mkdir -p ${BINARY_NAME}-darwin-arm64-package && cp ${BINARY_NAME}-darwin-arm64 ${BINARY_NAME}-darwin-arm64-package/
 	cd dist && cp -r ../templates ${BINARY_NAME}-darwin-arm64-package/
-	cd dist && tar -czf ../release/${BINARY_NAME}-darwin-arm64.tar.gz ${BINARY_NAME}-darwin-arm64-package/
+	cd dist && COPYFILE_DISABLE=1 tar -czf ../release/${BINARY_NAME}-darwin-arm64.tar.gz ${BINARY_NAME}-darwin-arm64-package/
 	
 	# Create Windows packages with templates
 	cd dist && mkdir -p ${BINARY_NAME}-windows-amd64-package && cp ${BINARY_NAME}-windows-amd64.exe ${BINARY_NAME}-windows-amd64-package/
