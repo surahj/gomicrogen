@@ -24,9 +24,18 @@ clean: ## Clean build artifacts
 	rm -rf dist/
 	rm -rf release/
 
-test: ## Run tests
+test: ## Run the fast test suite (no docker, no network)
 	@echo "Running tests..."
-	go test -v ./cmd/... ./internal/...
+	go test ./...
+
+test-verbose: ## Run the fast suite showing every case
+	go test -v ./...
+
+test-e2e: ## Run end-to-end tests (requires docker; spins up MySQL/Postgres/Redis/RabbitMQ)
+	@echo "Running end-to-end tests (this pulls images and compiles generated services)..."
+	cd test/e2e && GOMICROGEN_E2E=1 go test -v -timeout 45m ./...
+
+test-all: test test-e2e ## Run everything
 
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."

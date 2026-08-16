@@ -63,7 +63,8 @@ type ServiceConfig struct {
 func NewServiceConfig(serviceName string) *ServiceConfig {
 	return &ServiceConfig{
 		ServiceName:         serviceName,
-		ModuleName:          "github.com/Choplife-group/" + serviceName,
+		// lowercase to match the fleet: module paths are case-sensitive
+		ModuleName:          "github.com/choplife-group/" + serviceName,
 		Description:         serviceName + " microservice",
 		Type:                "general",
 		Version:             "1.0.0",

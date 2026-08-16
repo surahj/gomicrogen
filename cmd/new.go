@@ -41,32 +41,35 @@ var newCmd = &cobra.Command{
 This will generate a complete project structure with all necessary files.
 
 The generated project includes:
-• Complete folder structure (app/, cmd/, docs/, k8s/, etc.)
+• Complete folder structure (app/, docs/, migrations/)
 • Docker and Docker Compose configurations
-• Kubernetes deployment manifests
-• Database migrations and models
+• Migrations applied automatically at startup
 • API documentation with Swagger/OpenAPI
 • Hot reload development setup
-• Observability integration
-• Redis caching and session management
+• Tracing, JSON access logs and a Prometheus /metrics endpoint
+• Real client-IP resolution and an IP-keyed rate limiter
 • Git repository initialization
 • Go module management
 
 Examples:
   # Basic microservice
-  gomicrogen new user-service --module github.com/myorg/user-service
+  gomicrogen new user-service --module github.com/choplife-group/user-service
+
+  # Typed service
+  gomicrogen new pawapay-service \
+    --module github.com/choplife-group/pawapay-service \
+    --type payment
 
   # With custom configuration
   gomicrogen new payment-service \
-    --module github.com/myorg/payment-service \
+    --module github.com/choplife-group/payment-service \
+    --type payment \
     --description "Payment processing microservice" \
     --version "2.1.0" \
-    --author "John Doe" \
     --port "3000" \
     --grpc-port "3001" \
-    --db-driver "mysql" \
+    --db-driver "postgres" \
     --db-host "localhost" \
-    --db-port "3306" \
     --db-password "secret" \
     --redis-host "localhost" \
     --redis-port "6379" \
@@ -74,14 +77,14 @@ Examples:
 
   # In custom directory
   gomicrogen new auth-service \
-    --module github.com/myorg/auth-service \
+    --module github.com/choplife-group/auth-service \
     --output-dir /path/to/projects
 
   # Force overwrite existing project
-  gomicrogen new my-service --module github.com/myorg/my-service --force
+  gomicrogen new my-service --module github.com/choplife-group/my-service --force
 
   # Skip Git and Go module initialization
-  gomicrogen new my-service --module github.com/myorg/my-service --git=false --go-mod=false`,
+  gomicrogen new my-service --module github.com/choplife-group/my-service --git=false --go-mod=false`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := args[0]
@@ -289,7 +292,7 @@ func init() {
 	rootCmd.AddCommand(newCmd)
 
 	// Required flags
-	newCmd.Flags().StringVarP(&moduleName, "module", "m", "", "Go module name (e.g., github.com/your-org/service-name)")
+	newCmd.Flags().StringVarP(&moduleName, "module", "m", "", "Go module name (e.g., github.com/choplife-group/service-name)")
 	newCmd.MarkFlagRequired("module")
 
 	// Service configuration flags

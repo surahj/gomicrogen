@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"go/format"
 	"html"
 	"io/fs"
 	"os"
@@ -230,16 +232,26 @@ func (tg *TemplateGenerator) generateFile(templatePath, targetPath string) error
 		return fmt.Errorf("failed to create target directory %s: %w", targetDir, err)
 	}
 
-	// Create target file
-	file, err := os.Create(targetPath)
-	if err != nil {
-		return fmt.Errorf("failed to create target file %s: %w", targetPath, err)
-	}
-	defer file.Close()
-
 	// Execute template
-	if err := tmpl.Execute(file, tg.config); err != nil {
+	var rendered bytes.Buffer
+	if err := tmpl.Execute(&rendered, tg.config); err != nil {
 		return fmt.Errorf("failed to execute template %s: %w", templatePath, err)
+	}
+
+	output := rendered.Bytes()
+
+	// Format Go output. Import order depends on the module path, which is only
+	// known now, so a fixed order in the template cannot be gofmt-clean for every
+	// module name. Fall back to the raw render if it does not parse.
+	if strings.HasSuffix(targetPath, ".go") {
+
+		if formatted, err := format.Source(output); err == nil {
+			output = formatted
+		}
+	}
+
+	if err := os.WriteFile(targetPath, output, 0644); err != nil {
+		return fmt.Errorf("failed to write target file %s: %w", targetPath, err)
 	}
 
 	fmt.Printf("Generated: %s\n", targetPath)
