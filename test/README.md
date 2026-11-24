@@ -10,7 +10,7 @@ passes `--go-mod=false --git=false`.
 | package | covers |
 |---|---|
 | `internal/config` | defaults, driver validation, driver-specific ports |
-| `internal/generator` | layout resolution, type resolution and aliases, file filters, overlay replacement, template substitution |
+| `internal/generator` | layout resolution, type resolution and aliases, file filters, overlay replacement, template substitution, empty renders not emitted |
 | `cmd` | the real binary against the real templates — every flag, every type, every error path |
 
 `cmd/cli_test.go` builds the CLI once in `TestMain` and executes it, so it exercises
@@ -26,6 +26,9 @@ What the fast suite locks down, in the order things have actually broken:
 - a `tmp` ancestor in the templates path must not silently skip every file
 - casino symbols must not leak into general or payment services
 - each flag's value must reach the file that consumes it
+- a template that renders empty is not emitted and leaves no directory behind, which is
+  how `app/database/` exists only for `--db-driver postgres`; MySQL services open their
+  database, Redis and RabbitMQ connections through go-utils instead
 
 ## End-to-end suite — `make test-e2e`
 
@@ -51,6 +54,9 @@ It asserts that a generated service:
 - resolves the client IP from `X-Forwarded-For`, preferring a public entry and
   ignoring a private one
 - works on both `--db-driver mysql` and `--db-driver postgres`
+- for the payment type, consumes every queue in `QUEUES` through the shared go-utils
+  RabbitMQ connection: the queue is declared under `QUEUE_PREFIX`, `<queue>_workers`
+  consumers attach, and a published message is consumed and acknowledged
 - still finds `migrations/` when the binary is moved away from where it was built
 
 ### Why a separate module

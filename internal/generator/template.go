@@ -105,13 +105,13 @@ func (tg *TemplateGenerator) renderTree(srcRoot, targetDir string, isBase bool) 
 			targetPath = filepath.Join(filepath.Dir(targetPath), ".env")
 		}
 
+		// Directories are created on demand by generateFile, so a directory whose
+		// templates all render empty (see generateFile) is not left behind.
 		if d.IsDir() {
-			// Create directory
-			return os.MkdirAll(targetPath, 0755)
-		} else {
-			// Generate file from template
-			return tg.generateFile(path, targetPath)
+			return nil
 		}
+
+		return tg.generateFile(path, targetPath)
 	})
 }
 
@@ -234,12 +234,6 @@ func (tg *TemplateGenerator) generateFile(templatePath, targetPath string) error
 		return fmt.Errorf("failed to parse template %s: %w", templatePath, err)
 	}
 
-	// Create target directory if it doesn't exist
-	targetDir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create target directory %s: %w", targetDir, err)
-	}
-
 	// Execute template
 	var rendered bytes.Buffer
 	if err := tmpl.Execute(&rendered, tg.config); err != nil {
@@ -247,6 +241,19 @@ func (tg *TemplateGenerator) generateFile(templatePath, targetPath string) error
 	}
 
 	output := rendered.Bytes()
+
+	// A template that renders to nothing is not emitted. This is how a file is
+	// made conditional: wrap its whole body in {{ if ... }}{{ end }}, as
+	// app/database/database.go.tmpl does for the Postgres-only connection.
+	if len(bytes.TrimSpace(output)) == 0 {
+		return nil
+	}
+
+	// Create target directory if it doesn't exist
+	targetDir := filepath.Dir(targetPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory %s: %w", targetDir, err)
+	}
 
 	// Format Go output. Import order depends on the module path, which is only
 	// known now, so a fixed order in the template cannot be gofmt-clean for every

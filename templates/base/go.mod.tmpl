@@ -4,12 +4,11 @@ go 1.24.0
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0 // indirect
-	github.com/choplife-group/go-utils v0.11.1
+	github.com/choplife-group/go-utils v0.12.0
 	github.com/go-cmd/cmd v1.4.2 // indirect
-	github.com/go-redis/redis v6.15.9+incompatible
-{{ if .IsPostgres }}	github.com/lib/pq v1.10.9{{ else }}	github.com/go-sql-driver/mysql v1.5.0{{ end }}
-	github.com/labstack/echo/v4 v4.13.3
-	github.com/rabbitmq/amqp091-go v1.8.1
+{{ if .IsPostgres }}	github.com/lib/pq v1.10.9
+{{ end }}	github.com/labstack/echo/v4 v4.13.3
+	github.com/rabbitmq/amqp091-go v1.10.0
 
 )
 
@@ -18,11 +17,12 @@ require (
 	github.com/gorilla/sessions v1.2.2
 	github.com/labstack/echo-contrib v0.15.0
 	github.com/mudphilo/gwt v1.0.2
+	github.com/redis/go-redis/v9 v9.14.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/swaggo/echo-swagger v1.4.1
 	github.com/swaggo/swag v1.16.2
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.2.3
-	github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.1
+	github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.2
 	github.com/uptrace/uptrace-go v1.27.1
 	go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho v0.53.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0

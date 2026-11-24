@@ -141,10 +141,11 @@ func TestEachTypeGeneratesItsOwnShape(t *testing.T) {
 			wantFiles: []string{
 				"main.go", "go.mod", "Dockerfile", "docker-compose-local.yml",
 				"app/router/router.go", "app/router/middleware.go", "app/router/status.go",
-				"app/controllers/controller.go", "app/database/database.go",
+				"app/controllers/controller.go",
 			},
-			// general is HTTP only and has no upstream
-			wantAbsent: []string{"app/grpc", "app/queue", "app/publisher", "app/rabbitmq"},
+			// general is HTTP only and has no upstream. MySQL (the default) opens its
+			// connections through go-utils, so there is no local database package.
+			wantAbsent: []string{"app/grpc", "app/queue", "app/publisher", "app/rabbitmq", "app/database"},
 		},
 		{
 			serviceType: "casino",
@@ -163,10 +164,11 @@ func TestEachTypeGeneratesItsOwnShape(t *testing.T) {
 			wantFiles: []string{
 				"app/router/router.go",
 				"app/grpc/wallet/wallet-service.proto",
-				"app/publisher/publisher.go", "app/queue/queue.go",
-				"app/queue/consumer.go", "app/rabbitmq/rabbitmq.go",
+				"app/queue/queue.go", "app/queue/consumer.go",
 			},
 			wantAbsent: []string{
+				// RabbitMQ connection, consumers and publishing come from go-utils
+				"app/publisher", "app/rabbitmq",
 				"app/grpc/wallet/wallet-service.pb.go",
 				"app/crontask",
 			},
@@ -523,22 +525,25 @@ func TestDatabaseDriverRendersTheRightStack(t *testing.T) {
 
 	cases := []struct {
 		driver     string
-		wantInDB   []string
-		wantInMain string
+		wantInDB   []string // nil: app/database must not be generated
+		wantInMain []string
 		wantInMod  string
+		absentMod  string
 		wantPort   string
 	}{
 		{
+			// MySQL is opened by go-utils, so there is no local database package
 			driver:     "mysql",
-			wantInDB:   []string{`_ "github.com/go-sql-driver/mysql"`, `const Driver = "mysql"`, "DBSystemMySQL", "@tcp("},
-			wantInMain: "migrate/v4/database/mysql",
-			wantInMod:  "github.com/go-sql-driver/mysql",
+			wantInMain: []string{"migrate/v4/database/mysql", "connection.OpenDatabaseFromEnvWithContext(ctx)"},
+			wantInMod:  "github.com/choplife-group/go-utils",
+			absentMod:  "github.com/lib/pq",
 			wantPort:   "DATABASE_PORT: 3306",
 		},
 		{
+			// go-utils does not speak Postgres yet, so the service opens its own pool
 			driver:     "postgres",
 			wantInDB:   []string{`_ "github.com/lib/pq"`, `const Driver = "postgres"`, "DBSystemPostgreSQL", "sslmode"},
-			wantInMain: "migrate/v4/database/postgres",
+			wantInMain: []string{"migrate/v4/database/postgres", "database.OpenFromEnvWithContext(ctx)"},
 			wantInMod:  "github.com/lib/pq",
 			wantPort:   "DATABASE_PORT: 5432",
 		},
@@ -549,16 +554,24 @@ func TestDatabaseDriverRendersTheRightStack(t *testing.T) {
 
 			dir := mustGenerate(t, "svc", "--db-driver", tc.driver)
 
+			if tc.wantInDB == nil && exists(t, dir, "app/database") {
+				t.Error("app/database must not be generated: the connection comes from go-utils")
+			}
 			for _, want := range tc.wantInDB {
 				if !fileContains(t, dir, "app/database/database.go", want) {
 					t.Errorf("database.go missing %q", want)
 				}
 			}
-			if !fileContains(t, dir, "main.go", tc.wantInMain) {
-				t.Errorf("main.go missing migrate driver %q", tc.wantInMain)
+			for _, want := range tc.wantInMain {
+				if !fileContains(t, dir, "main.go", want) {
+					t.Errorf("main.go missing %q", want)
+				}
 			}
 			if !fileContains(t, dir, "go.mod", tc.wantInMod) {
-				t.Errorf("go.mod missing driver dependency %q", tc.wantInMod)
+				t.Errorf("go.mod missing dependency %q", tc.wantInMod)
+			}
+			if tc.absentMod != "" && fileContains(t, dir, "go.mod", tc.absentMod) {
+				t.Errorf("go.mod must not require %q", tc.absentMod)
 			}
 			if !fileContains(t, dir, "docker-compose-local.yml", tc.wantPort) {
 				t.Errorf("compose missing %q: the port default must follow the driver", tc.wantPort)

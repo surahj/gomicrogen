@@ -20,12 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API documentation with Swagger
 - Hot reload configuration with Air
 - Observability integration (OpenTelemetry, Uptrace)
+- Generated services open MySQL, Redis and RabbitMQ through `go-utils/connection`
+  (go-utils v0.12.0), the same way beon-service does. `--db-driver postgres` keeps a
+  generated `app/database/database.go`, because go-utils only opens MySQL
+- A template that renders to nothing is no longer emitted, so a file can be made
+  conditional by wrapping its body in `{{ if ... }}`
 
 ### Changed
+
+- Redis moved from `go-redis/redis` v6 to `redis/go-redis/v9`; the `app/library` Redis
+  helpers now take a `context.Context` first
+- The status endpoint pings the app's existing database and Redis pools instead of
+  opening a new Redis client per request
+- Startup fails fast when the database, Redis or RabbitMQ cannot be reached
 
 ### Deprecated
 
 ### Removed
+
+- `app/database/{redis,rabbitmq,status}.go`, and `app/database/database.go` for MySQL
+- The payment type's `app/publisher` and `app/rabbitmq` packages, replaced by the shared
+  `*connection.RabbitMQ`, which reconnects on its own
 
 ### Fixed
 

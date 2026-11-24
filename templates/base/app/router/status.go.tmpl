@@ -1,29 +1,40 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 
-	"{{ .ModuleName }}/app/database"
+	"github.com/choplife-group/go-utils/connection"
 	"github.com/labstack/echo/v4"
 )
 
 func (a *App) GetStatus(c echo.Context) error {
 
 	ctx := c.Request().Context()
-	defer ctx.Done()
 
 	status := make(map[string]interface{})
 
 	statusCode := http.StatusOK
 
-	// Check database status
-	st, re := database.CheckConnectionStatus(c.Request().Context(), a.DB)
-	if st > statusCode {
-		statusCode = st
+	// ping the pools the app already holds rather than opening new ones
+	if err := connection.PingDatabaseWithContext(ctx, a.DB); err != nil {
+
+		status["database"] = fmt.Sprintf("database error - %s", err.Error())
+		statusCode = http.StatusInternalServerError
+
+	} else {
+
+		status["database"] = "database - sent successful ping"
 	}
 
-	for k, v := range re {
-		status[k] = v
+	if err := connection.PingRedisWithContext(ctx, a.RedisConn); err != nil {
+
+		status["redis"] = fmt.Sprintf("redis error - %s", err.Error())
+		statusCode = http.StatusInternalServerError
+
+	} else {
+
+		status["redis"] = "PONG"
 	}
 
 	// Add service status
