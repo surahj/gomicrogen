@@ -9,6 +9,8 @@ A powerful CLI tool to scaffold Go microservice projects with a predefined folde
 - **Quick Project Scaffolding**: Generate complete Go microservice projects in seconds
 - **Production-Ready Templates**: Docker, hot reload, migrations, Swagger and observability
 - **MySQL or PostgreSQL**: `--db-driver` switches the driver, DSN, migration backend and dependency
+- **Shared connections**: MySQL, Redis and RabbitMQ are opened with `go-utils/connection`, the
+  same code every service in the fleet uses, rather than hand-rolled per service
 - **Git Integration**: Automatic Git repository initialization with dev branch
 - **Go Module Management**: Automatic `go mod init` and `go mod tidy` execution
 - **Hot Reload Support**: Includes Air configuration for development
@@ -177,7 +179,7 @@ list what is installed.
 |---|---|---|
 | `general` (default) | nothing beyond the base | anything that isn't one of the below |
 | `casino` | gRPC server + `casino-service.proto` | game provider integrations, which reach wallet/identity/bonus through casino-service |
-| `payment` | gRPC server + `wallet-service.proto`, RabbitMQ publisher, queue consumers | PSP integrations |
+| `payment` | gRPC server + `wallet-service.proto`, shared RabbitMQ connection, queue consumers | PSP integrations |
 
 Only `casino` and `payment` open a gRPC port; a `general` service is HTTP only.
 
@@ -219,10 +221,19 @@ consumes it.
 | `--db-port` | follows the driver | `docker-compose-local.yml` |
 | `--db-password` | | `docker-compose-local.yml` |
 
-`--db-driver` accepts `mysql` or `postgres`; anything else is rejected. It sets the DSN
-format, `otelsql` attributes, the golang-migrate backend, the `go.mod` dependency
-(`go-sql-driver/mysql` or `lib/pq`), and exports `database.Driver` so handlers can pass it
-to `goutils.Db{Dialect: database.Driver}` and get the right placeholder style.
+`--db-driver` accepts `mysql` or `postgres`; anything else is rejected.
+
+| | `mysql` (default) | `postgres` |
+|---|---|---|
+| connection | `connection.OpenDatabaseFromEnvWithContext` from go-utils | generated `app/database/database.go` (`database.OpenFromEnvWithContext`) |
+| `app/database/` | not generated | generated, exports `database.Driver = "postgres"` |
+| migration backend | `migrate/v4/database/mysql` | `migrate/v4/database/postgres` |
+| driver in `go.mod` | none directly (go-utils brings it) | `lib/pq` |
+
+go-utils only opens MySQL today, so a Postgres service keeps its own small connection file.
+It reads the same `DATABASE_*` variables and fails the same way, so it can be swapped for
+go-utils once Postgres lands there. Pass `"mysql"` or `database.Driver` to
+`goutils.Db{Dialect: ...}` to get the right placeholder style.
 
 `--db-port` defaults to `3306` for MySQL and `5432` for PostgreSQL; passing it explicitly
 overrides that.
@@ -239,6 +250,10 @@ overrides that.
 Two Redis instances are configured: `REDIS_*` is the service-local cache, `GLOBAL_REDIS_*`
 is the shared platform instance that `auth.Authenticate` reads tokens from. Both are seeded
 from these flags; point them at different hosts in your deployment.
+
+Both clients come from go-utils (`connection.OpenRedisFromEnvWithContext` and
+`connection.OpenGlobalRedisFromEnvWithContext`) and use `github.com/redis/go-redis/v9`, so the
+`app/library` helpers take a `context.Context` first: `library.GetRedisKey(ctx, conn, key)`.
 
 #### Output Options
 
@@ -327,7 +342,7 @@ service-name/
 │   ├── auth/           # token validation middleware
 │   ├── constants/      # application constants
 │   ├── controllers/    # HTTP handlers and the Controller struct
-│   ├── database/       # MySQL/Postgres, Redis and RabbitMQ connections
+│   ├── database/       # Postgres only: MySQL, Redis and RabbitMQ come from go-utils
 │   ├── library/        # shared helpers
 │   ├── models/         # request/response structs
 │   ├── router/         # router.go (App, Initialize, setRouters, Run)
@@ -357,11 +372,14 @@ service-name/
 
 ```
 ├── app/grpc/wallet/wallet-service.proto
-├── app/publisher/         # RabbitMQ publisher
 ├── app/queue/             # consumers, driven by the QUEUES env var
-├── app/rabbitmq/          # connection handling
-└── app/router/router.go   # + GRPCRun, getGrpcConn, publisher and queue wiring
+└── app/router/router.go   # + GRPCRun, getGrpcConn, RabbitMQ and queue wiring
 ```
+
+The payment type dials one `*connection.RabbitMQ` (go-utils) and shares it with the queue
+consumers and the controller. It redials on its own when the broker drops, and each consumer
+re-declares its queue and resumes. Add a handler per queue in `app/queue/consumer.go`; publish
+with `controller.RabbitMQ.PublishWithContext(ctx, queue, payload, priority)`.
 
 Routes go in `setRouters` in `app/router/router.go`, and collaborators are wired inline in
 `Initialize` — the same shape every service in the fleet uses.
@@ -416,8 +434,9 @@ RABBITMQ_PORT=5672
 RABBITMQ_USER=guest
 RABBITMQ_PASS=guest
 RABBITMQ_VHOST=
-QUEUES=                              # comma-separated queues to consume
-QUEUE_PREFIX=
+QUEUES=                              # comma-separated queues to consume, e.g. deposit,withdraw
+QUEUE_PREFIX=                        # prepended to consumed queue names by go-utils
+# <queue>_workers=1                  # consumers per queue, e.g. deposit_workers=4
 
 # Observability
 UPTRACE_DSN=your_uptrace_dsn

@@ -47,6 +47,8 @@ The generated project includes:
 • API documentation with Swagger/OpenAPI
 • Hot reload development setup
 • Tracing, JSON access logs and a Prometheus /metrics endpoint
+• MySQL, Redis and RabbitMQ connections from go-utils/connection
+  (--db-driver postgres generates its own app/database/database.go)
 • Real client-IP resolution and an IP-keyed rate limiter
 • Git repository initialization
 • Go module management
@@ -304,7 +306,7 @@ func init() {
 	newCmd.Flags().StringVarP(&environment, "env", "e", "development", "Environment (development, staging, production)")
 
 	// Database configuration flags
-	newCmd.Flags().StringVarP(&databaseDriver, "db-driver", "", "mysql", "Database driver (mysql, postgres)")
+	newCmd.Flags().StringVarP(&databaseDriver, "db-driver", "", "mysql", "Database driver (mysql, postgres). mysql connects through go-utils; postgres generates app/database/database.go")
 	newCmd.Flags().StringVarP(&databaseHost, "db-host", "", "localhost", "Database host")
 	newCmd.Flags().StringVarP(&databasePort, "db-port", "", "", "Database port (3306 for MySQL, 5432 for PostgreSQL)")
 	newCmd.Flags().StringVarP(&databasePassword, "db-password", "", "", "Database password")

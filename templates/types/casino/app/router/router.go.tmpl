@@ -10,9 +10,9 @@ import (
 	"os"
 
 	"{{ .ModuleName }}/app/controllers"
-	db "{{ .ModuleName }}/app/database"
+	"github.com/choplife-group/go-utils/connection"
 	observability "github.com/choplife-group/go-utils/observability"
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -87,10 +87,22 @@ func (a *App) Initialize(tr trace.Tracer, ctx context.Context, dbInstance *sql.D
 	a.E.Use(middleware.RateLimiterWithConfig(CustomRateLimiterConfig()))
 
 	a.DB = dbInstance
-	a.RedisConn = db.RedisClient()
+
+	// service-local cache, from the REDIS_* variables
+	redisConn, err := connection.OpenRedisFromEnvWithContext(ctx)
+	if err != nil {
+		logrus.WithContext(ctx).Panic(err)
+	}
+
+	a.RedisConn = redisConn
 
 	// identity-service writes auth tokens here, so auth reads this, not RedisConn
-	a.GlobalRedisConn = db.GlobalRedisClient()
+	globalRedisConn, err := connection.OpenGlobalRedisFromEnvWithContext(ctx)
+	if err != nil {
+		logrus.WithContext(ctx).Panic(err)
+	}
+
+	a.GlobalRedisConn = globalRedisConn
 
 	// casino-service is the single upstream for a provider integration: wallet,
 	// identity and bonus are reached through it. Generate app/grpc/casino from

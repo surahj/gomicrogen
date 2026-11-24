@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"{{ .ModuleName }}/app/database"
-	"{{ .ModuleName }}/app/router"
+{{ if .IsPostgres }}	"{{ .ModuleName }}/app/database"
+{{ end }}	"{{ .ModuleName }}/app/router"
 	"{{ .ModuleName }}/docs"
-	"github.com/golang-migrate/migrate/v4"
+{{ if not .IsPostgres }}	"github.com/choplife-group/go-utils/connection"
+{{ end }}	"github.com/golang-migrate/migrate/v4"
 {{ if .IsPostgres }}	migratedriver "github.com/golang-migrate/migrate/v4/database/postgres"{{ else }}	migratedriver "github.com/golang-migrate/migrate/v4/database/mysql"{{ end }}
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/sirupsen/logrus"
@@ -57,15 +58,19 @@ func main() {
 
 	fmt.Printf("Trace: %s\n", uptrace.TraceURL(mainSPan))
 
-	//setup database
-	dbInstance := database.DbInstance()
+	// setup database. MySQL comes from go-utils; go-utils does not speak
+	// Postgres yet, so a Postgres service opens its own pool in app/database.
+{{ if .IsPostgres }}	dbInstance, err := database.OpenFromEnvWithContext(ctx){{ else }}	dbInstance, err := connection.OpenDatabaseFromEnvWithContext(ctx){{ end }}
+	if err != nil {
+		logrus.WithContext(ctx).Panic(err)
+	}
 
 	driver, err := migratedriver.WithInstance(dbInstance, &migratedriver.Config{})
 	if err != nil {
 		logrus.Panic(err)
 	}
 
-	m, err := migrate.NewWithDatabaseInstance(fmt.Sprintf("file:///%s/migrations", GetRootPath()), database.Driver, driver)
+	m, err := migrate.NewWithDatabaseInstance(fmt.Sprintf("file:///%s/migrations", GetRootPath()), {{ if .IsPostgres }}database.Driver{{ else }}"mysql"{{ end }}, driver)
 	if err != nil {
 
 		// m is nil here, so this must not fall through to m.Up()

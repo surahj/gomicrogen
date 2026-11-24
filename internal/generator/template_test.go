@@ -225,3 +225,53 @@ func TestTemplateValuesAreSubstituted(t *testing.T) {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
 }
+
+// A template whose body is wrapped in a false condition renders to nothing and
+// must not be emitted, nor leave its directory behind. This is how a file is
+// generated for one database driver only.
+func TestEmptyRenderIsNotEmitted(t *testing.T) {
+
+	root := t.TempDir()
+
+	pkg := filepath.Join(root, "base", "app", "database")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	body := "{{ if .IsPostgres -}}\npackage database\n{{- end }}\n"
+	if err := os.WriteFile(filepath.Join(pkg, "database.go.tmpl"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	for _, tc := range []struct {
+		driver   string
+		wantFile bool
+	}{
+		{config.DriverMySQL, false},
+		{config.DriverPostgres, true},
+	} {
+		t.Run(tc.driver, func(t *testing.T) {
+
+			target := t.TempDir()
+
+			cfg := config.NewServiceConfig("svc")
+			cfg.DatabaseDriver = tc.driver
+
+			gen := NewTemplateGenerator(ResolveLayout(root), "", cfg)
+			if err := gen.GenerateService(target); err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+
+			_, fileErr := os.Stat(filepath.Join(target, "app", "database", "database.go"))
+			if got := fileErr == nil; got != tc.wantFile {
+				t.Errorf("database.go emitted = %v, want %v", got, tc.wantFile)
+			}
+
+			if !tc.wantFile {
+				if _, err := os.Stat(filepath.Join(target, "app")); err == nil {
+					t.Error("a directory with nothing to emit must not be created")
+				}
+			}
+		})
+	}
+}

@@ -1,78 +1,66 @@
 package library
 
 import (
+	"context"
 	"fmt"
-	"github.com/go-redis/redis"
 	"log"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
-func GetRedisKey(conn *redis.Client, key string) (string, error) {
+func GetRedisKey(ctx context.Context, conn *redis.Client, key string) (string, error) {
 
-	//BOOKING:CODE
-
-	//AUTHORIZATION
-	//if strings.HasPrefix(key,"PROFILE:") || strings.HasPrefix(key,"BOOKING:") || strings.HasPrefix(key,"AUTHORIZATION:")  {
-
-	var data string
-	data, err := conn.Get(key).Result()
+	data, err := conn.Get(ctx, key).Result()
 	if err != nil {
 
 		return data, fmt.Errorf("error getting key %s: %v", key, err)
 	}
 
-	return data, err
-	//}
-
-	//return "",errors.New("redis stopped")
-
+	return data, nil
 }
 
-func SetRedisKey(conn *redis.Client, key string, value string) error {
+func SetRedisKey(ctx context.Context, conn *redis.Client, key string, value string) error {
 
-	_, err := conn.Set(key, value, time.Second*time.Duration(0)).Result()
+	_, err := conn.Set(ctx, key, value, 0).Result()
 	if err != nil {
 
-		v := string(value)
-
-		if len(v) > 15 {
-
-			v = v[0:12] + "..."
-		}
-
-		return fmt.Errorf("error setting key %s to %s: %v", key, v, err)
+		return fmt.Errorf("error setting key %s to %s: %v", key, truncate(value), err)
 	}
-	return err
+
+	return nil
 }
 
-func SetRedisKeyWithExpiry(conn *redis.Client, key string, value string, seconds int) error {
+func SetRedisKeyWithExpiry(ctx context.Context, conn *redis.Client, key string, value string, seconds int) error {
 
-	_, err := conn.Set(key, value, time.Second*time.Duration(seconds)).Result()
+	_, err := conn.Set(ctx, key, value, time.Second*time.Duration(seconds)).Result()
 	if err != nil {
-
-		v := string(value)
-
-		if len(v) > 15 {
-
-			v = v[0:12] + "..."
-		}
 
 		log.Printf("error saving redisKey %s error %s", key, err.Error())
-		return fmt.Errorf("error setting key %s to %s: %v", key, v, err)
+		return fmt.Errorf("error setting key %s to %s: %v", key, truncate(value), err)
 	}
 
-	return err
+	return nil
 }
 
-func IncRedisKey(conn *redis.Client, key string) (int64, error) {
+func IncRedisKey(ctx context.Context, conn *redis.Client, key string) (int64, error) {
 
-	var data int64
-	data, err := conn.Incr(key).Result()
-
+	data, err := conn.Incr(ctx, key).Result()
 	if err != nil {
 
-		return data, fmt.Errorf("error getting key %s: %v", key, err)
+		return data, fmt.Errorf("error incrementing key %s: %v", key, err)
 	}
 
-	return data, err
+	return data, nil
+}
+
+// truncate keeps values out of error messages beyond a short prefix
+func truncate(value string) string {
+
+	if len(value) > 15 {
+
+		return value[0:12] + "..."
+	}
+
+	return value
 }

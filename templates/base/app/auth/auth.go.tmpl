@@ -12,7 +12,7 @@ import (
 	"{{ .ModuleName }}/app/library"
 	"{{ .ModuleName }}/app/models"
 	goutils "github.com/choplife-group/go-utils"
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 	jwtfiltergolang "github.com/mudphilo/gwt"
@@ -131,7 +131,7 @@ func checkAuthenticate(c echo.Context, globalRedisConn *redis.Client, module, pe
 			keyName := fmt.Sprintf("token-hash:%d", userID)
 
 			// 3. get the hash from global redis let this be y
-			ydhash, err := library.GetRedisKey(globalRedisConn, keyName)
+			ydhash, err := library.GetRedisKey(c.Request().Context(), globalRedisConn, keyName)
 
 			if err != nil {
 

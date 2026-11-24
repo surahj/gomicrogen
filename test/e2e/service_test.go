@@ -17,6 +17,7 @@ import (
 	// registered so the assertions below can open both databases directly
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // Every service type must compile and serve its endpoints.
@@ -348,4 +349,81 @@ func copyDir(src, dst string) error {
 	}
 
 	return nil
+}
+
+// A payment service consumes every queue in QUEUES through the shared go-utils
+// RabbitMQ connection: the queue is declared under QUEUE_PREFIX, a consumer is
+// attached, and a published message is taken off the queue and acknowledged.
+func TestPaymentConsumesConfiguredQueues(t *testing.T) {
+
+	dbName := "svc_consumer"
+	mustCreateMySQLDatabase(t, dbName)
+
+	dir := generate(t, "svc", "--type", "payment")
+	bin := compile(t, dir)
+
+	env := append(serviceEnv("mysql", dbName, "18600", "18601"),
+		"QUEUES=deposit", "deposit_workers=2", "QUEUE_PREFIX=e2e")
+
+	runService(t, bin, dir, env, "18600")
+
+	conn, err := amqp.Dial(fmt.Sprintf("amqp://guest:guest@%s:%s/", infra.rabbitHost, infra.rabbitPort))
+	if err != nil {
+		t.Fatalf("dial rabbitmq: %v", err)
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	defer ch.Close()
+
+	const queue = "e2e.deposit"
+
+	var consumers int
+	deadline := time.Now().Add(30 * time.Second)
+
+	for time.Now().Before(deadline) {
+
+		// passive: fails if the service has not declared the queue yet, which
+		// also closes the channel, so reopen on error
+		q, err := ch.QueueDeclarePassive(queue, true, false, false, false, amqp.Table{"x-max-priority": int32(5)})
+		if err == nil && q.Consumers >= 2 {
+			consumers = q.Consumers
+			break
+		}
+		if err != nil {
+			if ch, err = conn.Channel(); err != nil {
+				t.Fatalf("reopen channel: %v", err)
+			}
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if consumers < 2 {
+		t.Fatalf("queue %s never got the 2 configured consumers", queue)
+	}
+
+	if err := ch.Publish(queue, queue, false, false, amqp.Publishing{Body: []byte(`{"amount":1}`)}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	deadline = time.Now().Add(15 * time.Second)
+
+	for time.Now().Before(deadline) {
+
+		q, err := ch.QueueDeclarePassive(queue, true, false, false, false, amqp.Table{"x-max-priority": int32(5)})
+		if err != nil {
+			t.Fatalf("inspect queue: %v", err)
+		}
+		if q.Messages == 0 {
+			return
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	t.Error("the published message was never consumed and acknowledged")
 }

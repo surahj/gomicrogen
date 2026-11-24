@@ -3,8 +3,8 @@ package controllers
 import (
 	"database/sql"
 
-	"{{ .ModuleName }}/app/publisher"
-	"github.com/go-redis/redis"
+	"github.com/choplife-group/go-utils/connection"
+	"github.com/redis/go-redis/v9"
 	trace "go.opentelemetry.io/otel/trace"
 )
 
@@ -13,5 +13,11 @@ type Controller struct {
 	RedisConn       *redis.Client
 	GlobalRedisConn *redis.Client
 	Tracer          trace.Tracer
-	Publisher       *publisher.Publisher
+
+	// RabbitMQ publishes to other services' queues, e.g.
+	//
+	//	err := controller.RabbitMQ.PublishWithContext(ctx, "reports-service.deposit.create", payload, 0)
+	//
+	// The queue name is used as given; QUEUE_PREFIX is not applied.
+	RabbitMQ *connection.RabbitMQ
 }

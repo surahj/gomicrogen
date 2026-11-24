@@ -1,14 +1,15 @@
+{{ if .IsPostgres -}}
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"time"
 
-{{ if .IsPostgres }}	_ "github.com/lib/pq"{{ else }}	_ "github.com/go-sql-driver/mysql"{{ end }}
+	_ "github.com/lib/pq"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
@@ -16,80 +17,78 @@ import (
 // Driver is the SQL dialect this service was generated for. Pass it to
 // goutils.Db{Dialect: database.Driver} so placeholders and RETURNING are
 // rendered correctly.
-const Driver = "{{ .DatabaseDriver }}"
+const Driver = "postgres"
 
-func DbInstance() *sql.DB {
+// OpenFromEnvWithContext opens the service's Postgres database from the
+// DATABASE_* variables and verifies it with a ping.
+//
+// MySQL services get this from go-utils (connection.OpenDatabaseFromEnv), which
+// does not speak Postgres yet. This file mirrors it, reading the same variables
+// and returning an error rather than a half-open pool, so it can be swapped for
+// go-utils once Postgres is supported there.
+func OpenFromEnvWithContext(ctx context.Context) (*sql.DB, error) {
 
+	host := os.Getenv("DATABASE_HOST")
+	port := os.Getenv("DATABASE_PORT")
 	username := os.Getenv("DATABASE_USERNAME")
 	password := os.Getenv("DATABASE_PASSWORD")
 	dbname := os.Getenv("DATABASE_NAME")
-	host := os.Getenv("DATABASE_HOST")
-	port := os.Getenv("DATABASE_PORT")
 
-{{ if .IsPostgres }}	sslMode := os.Getenv("DATABASE_SSL_MODE")
+	switch {
+	case host == "":
+		return nil, fmt.Errorf("database: host not configured")
+	case port == "":
+		return nil, fmt.Errorf("database: port not configured")
+	case username == "":
+		return nil, fmt.Errorf("database: username not configured")
+	case dbname == "":
+		return nil, fmt.Errorf("database: name not configured")
+	}
+
+	sslMode := os.Getenv("DATABASE_SSL_MODE")
 	if sslMode == "" {
 		sslMode = "disable"
 	}
 
-	dbURI := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", host, port, username, password, dbname, sslMode)
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, username, password, dbname, sslMode)
 
-	Db, err := otelsql.Open(Driver, dbURI,
+	db, err := otelsql.Open(Driver, dsn,
 		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
-		otelsql.WithDBName(dbname)){{ else }}	dbURI := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=True&multiStatements=true", username, password, host, port, dbname, "utf8")
-
-	Db, err := otelsql.Open(Driver, dbURI,
-		otelsql.WithAttributes(semconv.DBSystemMySQL),
-		otelsql.WithDBName(dbname)){{ end }}
-
-	checkErr(err)
-
-	otelsql.ReportDBStatsMetrics(Db)
-
-	//Db, err := sql.Open("mysql", dbURI)
-
-	//checkErr(err)
-
-	idleConnection := os.Getenv("DATABASE_IDLE_CONNECTION")
-	ic, err := strconv.Atoi(idleConnection)
-
+		otelsql.WithDBName(dbname))
 	if err != nil {
-
-		ic = 5
+		return nil, fmt.Errorf("database: open %s@%s:%s/%s: %w", username, host, port, dbname, err)
 	}
 
-	maxConnection := os.Getenv("DATABASE_MAX_CONNECTION")
+	lifetime := time.Second * time.Duration(envInt("DATABASE_CONNECTION_LIFETIME", 60))
 
-	mx, err := strconv.Atoi(maxConnection)
+	db.SetMaxIdleConns(envInt("DATABASE_IDLE_CONNECTION", 5))
+	db.SetMaxOpenConns(envInt("DATABASE_MAX_CONNECTION", 10))
+	db.SetConnMaxLifetime(lifetime)
+	db.SetConnMaxIdleTime(lifetime)
 
-	if err != nil {
+	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-		mx = 10
+	if err := db.PingContext(pingCtx); err != nil {
+
+		db.Close()
+
+		return nil, fmt.Errorf("database: ping %s@%s:%s/%s: %w", username, host, port, dbname, err)
 	}
 
-	connectionLifetime := os.Getenv("DATABASE_CONNECTION_LIFETIME")
+	otelsql.ReportDBStatsMetrics(db)
 
-	cl, err := strconv.Atoi(connectionLifetime)
-
-	if err != nil {
-
-		cl = 60
-	}
-
-	Db.SetMaxIdleConns(ic)
-	Db.SetConnMaxLifetime(time.Second * time.Duration(cl))
-	Db.SetMaxOpenConns(mx)
-	Db.SetConnMaxIdleTime(time.Second * time.Duration(cl))
-
-	err = Db.Ping()
-	checkErr(err)
-	return Db
+	return db, nil
 }
 
-func checkErr(err error) {
+func envInt(name string, def int) int {
 
-	if err != nil {
-
-		fmt.Println("db connection error", err)
-		log.Printf("DB ERROR %s ", err.Error())
+	value, err := strconv.Atoi(os.Getenv(name))
+	if err != nil || value <= 0 {
+		return def
 	}
+
+	return value
 }
+{{- end }}

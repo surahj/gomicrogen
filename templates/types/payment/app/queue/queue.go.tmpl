@@ -4,77 +4,80 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/go-redis/redis"
-	amqp "github.com/rabbitmq/amqp091-go"
+	"{{ .ModuleName }}/app/constants"
+	"github.com/choplife-group/go-utils/connection"
+	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type Queue struct {
-	RabbitMqConnection *amqp.Connection
-	DB                 *sql.DB
-	RedisConn          *redis.Client
-	Tracer             trace.Tracer
+	RabbitMQ  *connection.RabbitMQ
+	DB        *sql.DB
+	RedisConn *redis.Client
+	Tracer    trace.Tracer
 }
 
-/*
-*
-initialize rabbitMQ connections and start all the consumers
-*/
+// InitQueues starts the consumers for every queue listed in QUEUES, e.g.
+// QUEUES=withdraw,deposit. <queue>_workers sets how many consumers a queue gets
+// (default 1). QUEUE_PREFIX is applied by go-utils, so list the bare names.
+//
+// It returns once the consumers are started. Each one runs until the
+// connection is closed, re-declaring its queue and resuming whenever the
+// broker comes back.
 func (q *Queue) InitQueues(ctx context.Context) {
 
-	// get websocket instance
-	queues := os.Getenv("QUEUES")
-
-	// get all the queues to consume from
-	parts := strings.Split(queues, ",")
+	parts := strings.Split(os.Getenv("QUEUES"), ",")
 	sort.Strings(parts)
 
-	// GetRabbitMQConnection returns nil when the broker is unreachable, and the
-	// consumer would dereference it
-	if q.RabbitMqConnection == nil {
+	for _, name := range parts {
 
-		log.Printf("no rabbitmq connection, not starting consumers")
-
-		return
-	}
-
-	// loop through the array
-	for _, que := range parts {
-
-		// remove any spaces
-		que = strings.ToLower(strings.TrimSpace(que))
+		name = strings.ToLower(strings.TrimSpace(name))
 
 		// strings.Split yields one empty element for an empty QUEUES
-		if que == "" {
+		if name == "" {
 			continue
 		}
 
-		// get number of workers/threads/consumers
-		// convert into int
-		numberOfWorkers, err := strconv.Atoi(os.Getenv(fmt.Sprintf("%s_workers", que)))
-		if err != nil {
-
-			numberOfWorkers = 1
-			log.Printf(" cant retrieve %s workers got error %s ", que, err.Error())
+		workers, err := strconv.Atoi(os.Getenv(fmt.Sprintf("%s_workers", name)))
+		if err != nil || workers < 1 {
+			workers = 1
 		}
 
-		x := 0
-
-		for x < numberOfWorkers {
-
-			// for each worker create a goroutine (thread/ run in background)
-			go q.SetupQueue(ctx, que, 1)
-			x++
+		cfg := connection.RabbitMQConsumerConfig{
+			Queue:         name,
+			PrefetchCount: 1,
+			MaxPriority:   5,
 		}
 
+		for i := 0; i < workers; i++ {
+
+			go q.consume(ctx, cfg)
+		}
+
+		logrus.WithContext(ctx).
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "started consumers",
+				constants.DATA:        q.RabbitMQ.QueueName(name),
+			}).
+			Infof("%d worker(s)", workers)
 	}
+}
 
-	select {}
+func (q *Queue) consume(ctx context.Context, cfg connection.RabbitMQConsumerConfig) {
 
+	if err := q.RabbitMQ.ConsumeWithContext(ctx, cfg, q.Handler(cfg.Queue)); err != nil {
+
+		logrus.WithContext(ctx).
+			WithFields(logrus.Fields{
+				constants.DESCRIPTION: "consumer stopped",
+				constants.DATA:        cfg.Queue,
+			}).
+			Error(err.Error())
+	}
 }
